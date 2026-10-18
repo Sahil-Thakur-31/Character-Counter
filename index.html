@@ -3,57 +3,472 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Character Counter</title>
+    <meta name="description" content="A fast, beautiful character, word and readability counter with live analytics.">
+    <title>Character Counter Pro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Lora:wght@400;500;600&family=Merriweather:wght@400;700&family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <div class="bg-decor" aria-hidden="true">
+        <span class="blob blob-1"></span>
+        <span class="blob blob-2"></span>
+        <span class="blob blob-3"></span>
+        <span class="grain"></span>
+    </div>
+
     <div id="app">
         <header>
-            <h1>Character Counter</h1>
+            <div class="brand">
+                <span class="brand-badge">Aa</span>
+                <div class="brand-text">
+                    <h1>Character Counter<span class="brand-pro">Pro</span></h1>
+                    <p class="brand-sub">Live text analytics, zero friction</p>
+                </div>
+            </div>
             <div class="header-icons">
-                <div id="settings-icon">⚙️</div>
-                <div id="dark-mode-toggle">🌙</div>
+                <button class="last-saved" id="last-saved" title="Click for save status">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                    <span id="last-saved-label">Saved locally</span>
+                </button>
+                <button id="command-palette-btn" class="icon-btn" title="Command palette (Ctrl+K)" aria-label="Open command palette">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>
+                </button>
+                <button id="documents-btn" class="icon-btn" title="Documents (Ctrl+Alt+D)" aria-label="Open documents">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5V6a2 2 0 0 1 2-2h8l4 4v11.5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 19.5Z"/><path d="M14 4v4h4"/></svg>
+                </button>
+                <button id="focus-mode-toggle" class="icon-btn" title="Focus mode (Ctrl+Alt+F)" aria-label="Toggle focus mode">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3"/></svg>
+                </button>
+                <button id="dark-mode-toggle" class="icon-btn theme-toggle" data-mode="auto" title="Theme: Auto - click or Ctrl+Alt+T to change" aria-label="Toggle theme">
+                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg>
+                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z"/></svg>
+                    <svg class="icon-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor" stroke="none"/></svg>
+                </button>
+                <button id="settings-icon" class="icon-btn" title="Settings (Ctrl+,)" aria-label="Open settings">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 13.5a7.9 7.9 0 0 0 0-3l1.9-1.4-2-3.4-2.2.6a7.8 7.8 0 0 0-2.6-1.5L14 2h-4l-.5 2.3a7.8 7.8 0 0 0-2.6 1.5l-2.2-.6-2 3.4L4.6 10a7.9 7.9 0 0 0 0 3l-1.9 1.5 2 3.4 2.2-.6c.76.65 1.64 1.16 2.6 1.5L10 22h4l.5-2.3a7.8 7.8 0 0 0 2.6-1.5l2.2.6 2-3.4-1.9-1.4Z"/></svg>
+                </button>
             </div>
         </header>
+
+        <div class="toolbar" id="toolbar">
+            <input type="text" id="document-title" class="doc-title-input" placeholder="Untitled document" maxlength="80" aria-label="Document title">
+            <div class="toolbar-group">
+                <button id="undo-btn" class="tool-btn icon-only" title="Undo (Ctrl+Z)" aria-label="Undo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 7 4 12l5 5M4 12h11a5 5 0 0 1 0 10h-1"/></svg>
+                </button>
+                <button id="redo-btn" class="tool-btn icon-only" title="Redo (Ctrl+Shift+Z)" aria-label="Redo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M15 7l5 5-5 5M20 12H9a5 5 0 0 0 0 10h1"/></svg>
+                </button>
+            </div>
+
+            <div class="toolbar-divider"></div>
+
+            <div class="toolbar-group">
+                <div class="dropdown" id="case-dropdown">
+                    <button class="tool-btn dropdown-trigger" id="case-dropdown-btn" title="Case options (Ctrl+Alt+U)" aria-haspopup="true" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 18 9 6h1l5 12M5.5 14h7.5M15 18l4-9 4 9M16.6 15.3h4.8"/></svg>
+                        <span>Case</span>
+                        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="dropdown-menu" id="case-dropdown-menu" role="menu">
+                        <button data-case="upper" role="menuitem">UPPERCASE</button>
+                        <button data-case="lower" role="menuitem">lowercase</button>
+                        <button data-case="title" role="menuitem">Title Case</button>
+                        <button data-case="sentence" role="menuitem">Sentence case</button>
+                        <button data-case="capitalize" role="menuitem">Capitalize Words</button>
+                    </div>
+                </div>
+                <button id="find-replace-btn" class="tool-btn" title="Find and replace (Ctrl+F)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>
+                    <span class="tool-label">Find &amp; Replace</span>
+                </button>
+            </div>
+
+            <div class="toolbar-divider"></div>
+
+            <div class="toolbar-group">
+                <button id="save-btn" class="tool-btn" title="Save (Ctrl+S)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg>
+                    <span class="tool-label">Save</span>
+                </button>
+                <button id="copy-btn" class="tool-btn" title="Copy text (Ctrl+Alt+C)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+                    <span class="tool-label">Copy</span>
+                </button>
+                <button id="upload-btn" class="tool-btn" title="Import a text file (Ctrl+Alt+I)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+                    <span class="tool-label">Import</span>
+                </button>
+                <input type="file" id="file-input" accept=".txt,.md" hidden>
+                <div class="dropdown" id="export-dropdown">
+                    <button class="tool-btn dropdown-trigger" id="export-dropdown-btn" title="Export options (Ctrl+Alt+E)" aria-haspopup="true" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></svg>
+                        <span class="tool-label">Export</span>
+                        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="dropdown-menu" id="export-dropdown-menu" role="menu">
+                        <button data-export="txt" role="menuitem">Download as .txt</button>
+                        <button data-export="md" role="menuitem">Download as .md</button>
+                        <button data-export="pdf" role="menuitem">Download as .pdf</button>
+                        <button data-export="doc" role="menuitem">Download as .doc (Word)</button>
+                        <div class="dropdown-divider"></div>
+                        <button data-export="report" role="menuitem">Copy stats report</button>
+                        <button data-export="share" role="menuitem">Copy shareable link</button>
+                    </div>
+                </div>
+                <button id="clear-btn" class="tool-btn danger" title="Clear all text (Ctrl+Alt+X)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>
+                    <span class="tool-label">Clear</span>
+                </button>
+            </div>
+
+            <div class="toolbar-divider"></div>
+
+            <div class="toolbar-group limit-group">
+                <span class="limit-label">Goal</span>
+                <div class="dropdown" id="limit-dropdown">
+                    <button class="tool-btn dropdown-trigger" id="limit-dropdown-btn" aria-haspopup="true" aria-expanded="false">
+                        <span id="limit-dropdown-label">No limit</span>
+                        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="dropdown-menu limit-menu" id="limit-dropdown-menu" role="menu">
+                        <button data-limit="0" data-limit-id="none" role="menuitem" class="selected">No limit</button>
+                        <button data-limit="280" data-limit-id="twitter" role="menuitem">X / Twitter post · 280</button>
+                        <button data-limit="160" data-limit-id="sms" role="menuitem">SMS message · 160</button>
+                        <button data-limit="60" data-limit-id="seo-title" role="menuitem">SEO title · 60</button>
+                        <button data-limit="160" data-limit-id="meta-desc" role="menuitem">Meta description · 160</button>
+                        <button data-limit="100" data-limit-id="youtube" role="menuitem">YouTube title · 100</button>
+                        <button data-limit="2200" data-limit-id="instagram" role="menuitem">Instagram caption · 2200</button>
+                        <div class="dropdown-divider" id="custom-goals-divider"></div>
+                        <div id="custom-goals-list"></div>
+                        <div class="dropdown-divider"></div>
+                        <div class="custom-goal-form" id="custom-goal-form">
+                            <input type="text" id="custom-goal-name" placeholder="Goal name" maxlength="30">
+                            <input type="number" id="custom-goal-limit" placeholder="Limit" min="1" max="999999">
+                            <button id="custom-goal-add" class="fr-btn primary" title="Add custom goal" aria-label="Add custom goal">+</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="find-replace-bar hidden" id="find-replace-bar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="fr-icon"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>
+            <input type="text" id="find-input" placeholder="Find...">
+            <input type="text" id="replace-input" placeholder="Replace with...">
+            <span class="match-badge" id="match-count">0 matches</span>
+            <button id="replace-one-btn" class="fr-btn">Replace</button>
+            <button id="replace-all-btn" class="fr-btn primary">Replace All</button>
+            <button id="find-replace-close" class="icon-btn small" aria-label="Close find and replace">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+        </div>
+
         <main>
-            <textarea id="text-input" placeholder="Type your text here..."></textarea>
+            <section class="editor-card">
+                <div id="text-input" contenteditable="true" spellcheck="true" data-placeholder="Start typing, or paste your text here..." role="textbox" aria-multiline="true"></div>
+                <div class="limit-ring-wrap hidden" id="limit-ring-wrap" title="Characters remaining for selected goal">
+                    <div class="limit-fill" id="limit-fill"></div>
+                    <span id="limit-remaining">0</span>
+                </div>
+            </section>
+
             <aside id="analytics">
                 <div id="stats-container">
-                    <p id="char-count-container">Characters: <span id="char-count">0</span></p>
-                    <p id="word-count-container">Words: <span id="word-count">0</span></p>
-                    <p id="sentence-count-container">Sentences: <span id="sentence-count">0</span></p>
-                    <p id="paragraph-count-container">Paragraphs: <span id="paragraph-count">0</span></p>
+                    <div class="stat-card" id="char-count-container" data-stat="charCount">
+                        <span class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7V5a1 1 0 0 1 1-1h2M4 17v2a1 1 0 0 0 1 1h2M20 7V5a1 1 0 0 0-1-1h-2M20 17v2a1 1 0 0 1-1 1h-2M9 9h.01M15 9h.01M9 15c.7.7 1.9 1 3 1s2.3-.3 3-1"/></svg>
+                        </span>
+                        <div class="stat-text">
+                            <span class="stat-value" id="char-count">0</span>
+                            <span class="stat-label">Characters</span>
+                        </div>
+                    </div>
+                    <div class="stat-card" id="word-count-container" data-stat="wordCount">
+                        <span class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h16"/></svg>
+                        </span>
+                        <div class="stat-text">
+                            <span class="stat-value" id="word-count">0</span>
+                            <span class="stat-label">Words</span>
+                        </div>
+                    </div>
+                    <div class="stat-card" id="sentence-count-container" data-stat="sentenceCount">
+                        <span class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                        </span>
+                        <div class="stat-text">
+                            <span class="stat-value" id="sentence-count">0</span>
+                            <span class="stat-label">Sentences</span>
+                        </div>
+                    </div>
+                    <div class="stat-card" id="paragraph-count-container" data-stat="paragraphCount">
+                        <span class="stat-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 4h13M6 9h13M6 14h8M4 4v16M4 18h4"/></svg>
+                        </span>
+                        <div class="stat-text">
+                            <span class="stat-value" id="paragraph-count">0</span>
+                            <span class="stat-label">Paragraphs</span>
+                        </div>
+                    </div>
                 </div>
+
+                <div class="stats-secondary" id="stats-secondary">
+                    <div class="mini-stat" id="no-space-container">
+                        <span class="mini-label">No-space chars</span>
+                        <span class="mini-value" id="no-space-count">0</span>
+                    </div>
+                    <div class="mini-stat" id="reading-time-container">
+                        <span class="mini-label">Reading time</span>
+                        <span class="mini-value" id="reading-time">0 sec</span>
+                    </div>
+                    <div class="mini-stat" id="speaking-time-container">
+                        <span class="mini-label">Speaking time</span>
+                        <span class="mini-value" id="speaking-time">0 sec</span>
+                    </div>
+                    <div class="mini-stat" id="avg-word-container">
+                        <span class="mini-label">Avg. word length</span>
+                        <span class="mini-value" id="avg-word-length">0</span>
+                    </div>
+                    <div class="mini-stat" id="longest-word-container">
+                        <span class="mini-label">Longest word</span>
+                        <span class="mini-value" id="longest-word">-</span>
+                    </div>
+                    <div class="mini-stat" id="unique-words-container">
+                        <span class="mini-label">Unique words</span>
+                        <span class="mini-value" id="unique-word-count">0</span>
+                    </div>
+                    <div class="mini-stat wide" id="reading-level-container">
+                        <span class="mini-label">Readability</span>
+                        <span class="mini-value" id="reading-level">-</span>
+                    </div>
+                </div>
+
                 <div id="word-density">
-                    <h3>Word Density</h3>
+                    <div class="word-density-header">
+                        <h3>Word Density</h3>
+                        <span class="word-density-count" id="unique-word-badge">0 unique</span>
+                    </div>
                     <div id="word-list-container">
-                        <ul id="word-list">
-                            <!-- List items will go here -->
-                        </ul>
+                        <ul id="word-list"></ul>
+                        <p class="empty-state hidden" id="word-density-empty">Start typing to see your most frequent words.</p>
                     </div>
                 </div>
             </aside>
         </main>
-        <div id="settings-panel" class="hidden">
-            <h2>Settings</h2>
-            <label>
-                <input type="checkbox" id="toggle-characters" checked> Show Characters
-            </label>
-            <label>
-                <input type="checkbox" id="toggle-words" checked> Show Words
-            </label>
-            <label>
-                <input type="checkbox" id="toggle-sentences" checked> Show Sentences
-            </label>
-            <label>
-                <input type="checkbox" id="toggle-paragraphs" checked> Show Paragraphs
-            </label>
-            <label>
-                <input type="checkbox" id="toggle-word-density" checked> Show Word Density
-            </label>
-            <button id="done-button">Done</button>
+    </div>
+
+    <div id="scrim" class="overlay hidden"></div>
+
+    <div id="command-palette" class="hidden" role="dialog" aria-modal="true" aria-label="Command palette">
+        <div class="cp-input-wrap">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>
+            <input type="text" id="command-palette-input" placeholder="Type a command or search...">
+            <kbd>Esc</kbd>
+        </div>
+        <ul id="command-palette-list"></ul>
+    </div>
+
+    <div id="save-status-modal" class="hidden" role="dialog" aria-modal="true" aria-label="Save status">
+        <div class="settings-header">
+            <h2>Save Status</h2>
+            <button id="save-status-close" class="icon-btn small" aria-label="Close">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+        </div>
+        <div class="settings-body">
+            <div class="save-status-row" id="save-status-row">
+                <span class="save-status-icon" id="save-status-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>
+                </span>
+                <div class="save-status-text">
+                    <p class="save-status-title" id="save-status-title">Saved locally</p>
+                    <p class="save-status-desc" id="save-status-desc">Autosave is on. Every change is written to this browser as you type.</p>
+                </div>
+            </div>
+            <p class="settings-hint save-status-note">
+                This draft is saved only in this browser, on this device (via <code>localStorage</code>). It is <strong>not</strong> synced anywhere, and can be lost if you clear your browser data, use a private/incognito window, or switch devices or browsers.
+            </p>
+            <button id="save-status-save-now" class="fr-btn primary hidden">Save now</button>
+
+            <section class="settings-section save-status-drive">
+                <h4>Saved Documents</h4>
+                <p class="settings-hint" id="drive-status-text">Saved documents are kept in this browser's IndexedDB storage, separate from the draft above - still local to this device until you connect Drive.</p>
+                <button id="connect-drive-btn" class="new-doc-btn">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3 4 17h16L12 3Z"/><path d="m8 17 4-7 4 7"/></svg>
+                    Connect Google Drive
+                </button>
+                <button id="disconnect-drive-btn" class="reset-btn hidden">Disconnect Google Drive</button>
+            </section>
         </div>
     </div>
+
+    <aside id="documents-panel" class="hidden drawer-left" aria-hidden="true">
+        <div class="settings-header">
+            <h2>Documents</h2>
+            <button id="documents-close" class="icon-btn small" aria-label="Close documents">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+        </div>
+        <div class="settings-body">
+            <button id="new-document-btn" class="new-doc-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                New blank document
+            </button>
+            <div class="save-as-row">
+                <input type="text" id="save-as-input" placeholder="Name this document…" maxlength="60">
+                <button id="save-as-btn" class="fr-btn primary">Save</button>
+            </div>
+            <ul id="documents-list"></ul>
+            <p class="empty-state" id="documents-empty">No saved documents yet. Save your current text to start building a library.</p>
+        </div>
+    </aside>
+
+    <aside id="settings-panel" class="hidden drawer-right" aria-hidden="true">
+        <div class="settings-header">
+            <h2>Settings</h2>
+            <button id="done-button" class="icon-btn small" aria-label="Close settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+            </button>
+        </div>
+        <div class="settings-body">
+            <section class="settings-section">
+                <h4>Saving</h4>
+                <label class="switch-row">
+                    <span>Autosave</span>
+                    <span class="switch"><input type="checkbox" id="toggle-autosave" checked><span class="switch-track"></span></span>
+                </label>
+                <p class="settings-hint">When off, use the Save button or Ctrl+S to save your changes.</p>
+            </section>
+
+            <section class="settings-section">
+                <h4>Visible Stats</h4>
+                <label class="switch-row">
+                    <span>Characters</span>
+                    <span class="switch"><input type="checkbox" id="toggle-characters" checked><span class="switch-track"></span></span>
+                </label>
+                <label class="switch-row">
+                    <span>Words</span>
+                    <span class="switch"><input type="checkbox" id="toggle-words" checked><span class="switch-track"></span></span>
+                </label>
+                <label class="switch-row">
+                    <span>Sentences</span>
+                    <span class="switch"><input type="checkbox" id="toggle-sentences" checked><span class="switch-track"></span></span>
+                </label>
+                <label class="switch-row">
+                    <span>Paragraphs</span>
+                    <span class="switch"><input type="checkbox" id="toggle-paragraphs" checked><span class="switch-track"></span></span>
+                </label>
+                <label class="switch-row">
+                    <span>Extra details</span>
+                    <span class="switch"><input type="checkbox" id="toggle-secondary" checked><span class="switch-track"></span></span>
+                </label>
+                <label class="switch-row">
+                    <span>Word density</span>
+                    <span class="switch"><input type="checkbox" id="toggle-word-density" checked><span class="switch-track"></span></span>
+                </label>
+            </section>
+
+            <section class="settings-section">
+                <h4>Editor</h4>
+                <div class="slider-row">
+                    <span>Editor font</span>
+                </div>
+                <div class="dropdown select-dropdown" id="editor-font-dropdown">
+                    <button class="settings-select-trigger dropdown-trigger" id="editor-font-dropdown-btn" aria-haspopup="true" aria-expanded="false">
+                        <span id="editor-font-dropdown-label">Sans - Inter</span>
+                        <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                    </button>
+                    <div class="dropdown-menu select-menu" id="editor-font-dropdown-menu" role="menu">
+                        <button data-font="ui" role="menuitem" class="selected">Sans - Inter</button>
+                        <button data-font="serif" role="menuitem">Serif - Lora</button>
+                        <button data-font="reading" role="menuitem">Reading - Merriweather</button>
+                        <button data-font="mono" role="menuitem">Mono - JetBrains Mono</button>
+                        <button data-font="rounded" role="menuitem">Rounded - Nunito</button>
+                    </div>
+                </div>
+                <div class="slider-row">
+                    <span>Font size</span>
+                    <span class="slider-value" id="font-size-value">18px</span>
+                </div>
+                <input type="range" id="font-size-slider" min="14" max="28" value="18" step="1">
+                <label class="switch-row">
+                    <span>Relaxed line height</span>
+                    <span class="switch"><input type="checkbox" id="toggle-line-height"><span class="switch-track"></span></span>
+                </label>
+            </section>
+
+            <section class="settings-section">
+                <h4>Appearance</h4>
+                <div class="theme-picker" id="theme-picker">
+                    <button data-theme="light" class="theme-option">
+                        <span class="theme-swatch light"></span> Light
+                    </button>
+                    <button data-theme="dark" class="theme-option">
+                        <span class="theme-swatch dark"></span> Dark
+                    </button>
+                    <button data-theme="auto" class="theme-option">
+                        <span class="theme-swatch auto"></span> Auto
+                    </button>
+                </div>
+            </section>
+
+            <button id="reset-settings" class="reset-btn">Reset to defaults</button>
+        </div>
+    </aside>
+
+    <div id="toast-container" aria-live="polite"></div>
+
+    <div class="dropdown-menu context-menu hidden" id="context-menu" role="menu">
+        <div class="cm-icon-row">
+            <button class="cm-icon-btn" data-action="cut" data-requires-selection role="menuitem" title="Cut (Ctrl+X)" aria-label="Cut">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="6" cy="6" r="2.4"/><circle cx="6" cy="18" r="2.4"/><path d="M20 5 7.8 12M20 19 7.8 12"/></svg>
+            </button>
+            <button class="cm-icon-btn" data-action="copy" data-requires-selection role="menuitem" title="Copy (Ctrl+C)" aria-label="Copy">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            </button>
+            <button class="cm-icon-btn" data-action="paste" role="menuitem" title="Paste (Ctrl+V)" aria-label="Paste">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="6" y="4" width="12" height="17" rx="2"/><rect x="9" y="2" width="6" height="4" rx="1"/></svg>
+            </button>
+            <button class="cm-icon-btn" data-action="delete" data-requires-selection role="menuitem" title="Delete" aria-label="Delete">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>
+            </button>
+            <button class="cm-icon-btn" data-action="select-all" role="menuitem" title="Select All (Ctrl+A)" aria-label="Select All">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2" stroke-dasharray="3 2.5"/></svg>
+            </button>
+        </div>
+        <div class="dropdown-divider"></div>
+        <div class="cm-icon-row">
+            <button class="cm-icon-btn" data-action="bold" role="menuitem" title="Bold" aria-label="Bold"><span class="cm-glyph cm-glyph-bold">B</span></button>
+            <button class="cm-icon-btn" data-action="italic" role="menuitem" title="Italic" aria-label="Italic"><span class="cm-glyph cm-glyph-italic">I</span></button>
+            <button class="cm-icon-btn" data-action="strike" role="menuitem" title="Strikethrough" aria-label="Strikethrough"><span class="cm-glyph cm-glyph-strike">S</span></button>
+            <button class="cm-icon-btn" data-action="code" role="menuitem" title="Inline Code" aria-label="Inline Code">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 8-4 4 4 4M15 8l4 4-4 4"/></svg>
+            </button>
+            <button class="cm-icon-btn" data-action="heading" role="menuitem" title="Heading" aria-label="Heading"><span class="cm-glyph cm-glyph-heading">H</span></button>
+        </div>
+        <div class="cm-icon-row">
+            <button class="cm-icon-btn" data-action="quote" role="menuitem" title="Quote" aria-label="Quote">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M9.5 6c-3 1.3-4.5 3.6-4.5 7v5h5.5v-5.5H7.3C7.5 10.5 8.3 9 10.3 8ZM19 6c-3 1.3-4.5 3.6-4.5 7v5H20v-5.5h-3.2c.2-2 1-3.5 3-4.5Z"/></svg>
+            </button>
+            <button class="cm-icon-btn" data-action="bullet-list" role="menuitem" title="Bullet List" aria-label="Bullet List">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="7" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="5" cy="17" r="1.5" fill="currentColor" stroke="none"/><path d="M9.5 7h10M9.5 12h10M9.5 17h10"/></svg>
+            </button>
+            <button class="cm-icon-btn" data-action="numbered-list" role="menuitem" title="Numbered List" aria-label="Numbered List">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.5 7h10M9.5 12h10M9.5 17h10"/><path d="M4 5.5h1.3v4M4 9.5h2.6M4.2 13.3c.1-.7.7-1.1 1.4-1.1.8 0 1.4.5 1.4 1.1 0 .5-.3.9-.9 1.3l-1.8 1.6h2.8"/></svg>
+            </button>
+            <button class="cm-icon-btn" data-action="link" data-requires-selection role="menuitem" title="Insert Link" aria-label="Insert Link">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1"><path d="M9.5 14.5a3.8 3.8 0 0 0 5.4 0l2.6-2.6a3.8 3.8 0 0 0-5.4-5.4L10.8 7.8"/><path d="M14.5 9.5a3.8 3.8 0 0 0-5.4 0l-2.6 2.6a3.8 3.8 0 0 0 5.4 5.4l1.3-1.3"/></svg>
+            </button>
+            <button class="cm-icon-btn" data-action="clear-format" data-requires-selection role="menuitem" title="Clear Formatting" aria-label="Clear Formatting">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15.5 4.5 20 9l-8.5 8.5H7L4 14.5 12.5 6a2.2 2.2 0 0 1 3-1.5Z"/><path d="M9.5 20h9"/></svg>
+            </button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="script.js"></script>
 </body>
 </html>
