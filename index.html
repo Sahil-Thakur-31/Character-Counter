@@ -301,6 +301,11 @@
                     Connect Google Drive
                 </button>
                 <button id="disconnect-drive-btn" class="reset-btn hidden">Disconnect Google Drive</button>
+                <div class="drive-folder-row hidden" id="drive-folder-row">
+                    <label for="drive-folder-input" class="drive-folder-label">Save to this Drive folder</label>
+                    <input type="text" id="drive-folder-input" class="drive-folder-input" placeholder="Character Counter" maxlength="200" spellcheck="false" autocomplete="off">
+                    <p class="settings-hint drive-folder-hint">Use <code>/</code> for a nested path, e.g. <code>Work/Notes</code>. Created automatically if it doesn't exist yet.</p>
+                </div>
             </section>
         </div>
     </div>

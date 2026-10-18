@@ -91,6 +91,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const driveStatusText = document.getElementById('drive-status-text');
     const connectDriveBtn = document.getElementById('connect-drive-btn');
     const disconnectDriveBtn = document.getElementById('disconnect-drive-btn');
+    const driveFolderRow = document.getElementById('drive-folder-row');
+    const driveFolderInput = document.getElementById('drive-folder-input');
 
     const toastContainer = document.getElementById('toast-container');
     const contextMenu = document.getElementById('context-menu');
@@ -1702,18 +1704,43 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    async function ensureDriveFolder() {
-        const q = encodeURIComponent(`name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+    function getDriveFolderPath() {
+        const stored = localStorage.getItem('driveFolderPath');
+        return (stored && stored.trim()) ? stored.trim() : DRIVE_FOLDER_NAME;
+    }
+
+    function escapeDriveQueryValue(value) {
+        return value.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    }
+
+    async function findOrCreateFolder(name, parentId) {
+        const parentClause = `'${parentId || 'root'}' in parents`;
+        const q = encodeURIComponent(`name='${escapeDriveQueryValue(name)}' and mimeType='application/vnd.google-apps.folder' and trashed=false and ${parentClause}`);
         const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
         const data = await res.json();
         if (data.files && data.files.length) return data.files[0].id;
+        const body = { name, mimeType: 'application/vnd.google-apps.folder' };
+        if (parentId) body.parents = [parentId];
         const createRes = await driveFetch('https://www.googleapis.com/drive/v3/files', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+            body: JSON.stringify(body)
         });
         const created = await createRes.json();
         return created.id;
+    }
+
+    // Walks/creates a "/"-separated path from Drive's root, one segment at a
+    // time, so a user can point saves anywhere in their own Drive - not just
+    // a single folder name hardcoded by the app.
+    async function ensureDriveFolder(path) {
+        const segments = (path || DRIVE_FOLDER_NAME).split('/').map(s => s.trim()).filter(Boolean);
+        const names = segments.length ? segments : [DRIVE_FOLDER_NAME];
+        let parentId = null;
+        for (const name of names) {
+            parentId = await findOrCreateFolder(name, parentId);
+        }
+        return parentId;
     }
 
     /* ---------- settings sync (Drive) ---------- */
@@ -1867,8 +1894,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const connected = isDriveActive();
         connectDriveBtn.classList.toggle('hidden', connected);
         disconnectDriveBtn.classList.toggle('hidden', !connected);
+        driveFolderRow.classList.toggle('hidden', !connected);
+        if (connected) driveFolderInput.value = getDriveFolderPath();
         driveStatusText.textContent = connected
-            ? `Saved documents are stored in the "${DRIVE_FOLDER_NAME}" folder in your Google Drive.`
+            ? `Saved documents are stored in "${getDriveFolderPath()}" in your Google Drive.`
             : "Saved documents are kept in this browser's IndexedDB storage, separate from the draft above - still local to this device until you connect Drive.";
     }
 
@@ -1901,7 +1930,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (resp.error) { showToast('error', 'Google sign-in was cancelled or failed'); return; }
                     driveAccessToken = resp.access_token;
                     try {
-                        driveFolderId = await ensureDriveFolder();
+                        driveFolderId = await ensureDriveFolder(getDriveFolderPath());
                         storageBackend = 'drive';
                         localStorage.setItem('storageBackend', 'drive');
                         updateDriveUI();
@@ -1919,6 +1948,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
     connectDriveBtn.addEventListener('click', connectGoogleDrive);
     disconnectDriveBtn.addEventListener('click', disconnectDrive);
+
+    driveFolderInput.addEventListener('change', async () => {
+        const path = driveFolderInput.value.trim() || DRIVE_FOLDER_NAME;
+        driveFolderInput.value = path;
+        localStorage.setItem('driveFolderPath', path);
+        if (!isDriveActive()) return;
+        driveFolderInput.disabled = true;
+        try {
+            driveFolderId = await ensureDriveFolder(path);
+            updateDriveUI();
+            renderDocuments();
+            showToast('success', `Now saving to "${path}" in Drive`);
+        } catch {
+            showToast('error', 'Could not switch to that Drive folder');
+        } finally {
+            driveFolderInput.disabled = false;
+        }
+    });
 
     /* ---------- unified document store ---------- */
     const DocStore = {
