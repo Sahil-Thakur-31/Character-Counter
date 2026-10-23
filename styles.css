@@ -323,6 +323,30 @@ header {
     color: var(--accent);
 }
 
+/* Document count badge: a small number in the corner instead of recoloring
+   the whole button, since having documents saved isn't something that needs
+   attention - it's just a count worth seeing at a glance. */
+.icon-badge {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: var(--surface-alt);
+    border: 1px solid var(--border-strong);
+    color: var(--text-muted);
+    font-size: 9px;
+    font-weight: 800;
+    font-family: var(--font-mono);
+    line-height: 1;
+    box-shadow: 0 0 0 2px var(--surface);
+}
+
 .icon-btn.attn-pulse, .tool-btn.attn-pulse {
     animation: attn-pulse 2.2s ease-in-out infinite;
 }
@@ -1303,6 +1327,10 @@ main {
     transform: translateX(100%);
 }
 
+/* Wider than the settings drawer so the search bar, folder filter and tag
+   chips all fit on one line instead of cramping together. */
+#documents-panel { width: 440px; }
+
 .drawer-left {
     left: 0;
     border-right: 1px solid var(--border);
@@ -1544,7 +1572,17 @@ main {
     gap: 26px;
 }
 
-#documents-panel .settings-body { gap: 14px; }
+/* Tightly related rows (create controls, filter controls) are grouped so
+   the flex gap only separates distinct sections, not every single row -
+   the old flat 14px-between-everything layout wasted a lot of height
+   before you ever reached the actual document list. */
+#documents-panel .settings-body { gap: 10px; padding: 16px 18px 22px; }
+
+.doc-create-group, .doc-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
 
 .settings-section h4 {
     margin: 0 0 12px;
@@ -1783,7 +1821,7 @@ input[type="range"]::-moz-range-thumb {
     justify-content: center;
     gap: 8px;
     width: 100%;
-    padding: 12px;
+    padding: 9px;
     border-radius: var(--radius-md);
     border: 1.5px dashed var(--border-strong);
     background: var(--surface-alt);
@@ -1802,25 +1840,211 @@ input[type="range"]::-moz-range-thumb {
     transform: translateY(-1px);
 }
 
-.save-as-row {
+.settings-header-actions {
     display: flex;
+    align-items: center;
     gap: 8px;
 }
 
-.save-as-row input {
+.icon-btn.primary-fill {
+    background: var(--gradient-brand);
+    border-color: transparent;
+    color: #fff;
+}
+
+.icon-btn.primary-fill:hover {
+    color: #fff;
+    border-color: transparent;
+    box-shadow: var(--shadow-md);
+}
+
+/* Every input in the create/filter groups sits under its own small caption
+   instead of relying on a placeholder alone. */
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
     flex: 1;
-    height: 38px;
-    padding: 0 12px;
+    min-width: 0;
+}
+
+.field-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+}
+
+.field-search { flex: 1.1; }
+.field-folder { flex: 0.7; }
+
+.field label {
+    font-size: 0.68em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-faint);
+    padding-left: 1px;
+}
+
+.field > input {
+    height: 32px;
+    padding: 0 10px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--surface-alt);
     color: var(--text);
-    font-size: 0.86em;
+    font-size: 0.8em;
     outline: none;
     transition: border-color var(--dur-fast);
 }
 
-.save-as-row input:focus { border-color: var(--primary); }
+.field > input:focus { border-color: var(--primary); }
+
+/* Chrome/Edge draw a native dropdown-arrow indicator on a text input that
+   has a datalist (#save-as-folder's autocomplete suggestions), which made
+   it look like its own little select next to the plain Tags input beside
+   it - and rendered at a different intrinsic height than the rest of the
+   row. Hiding it keeps the field a plain text box; the autocomplete
+   suggestions still work on focus either way. */
+.field > input::-webkit-calendar-picker-indicator { display: none; }
+
+.save-as-btn-inline {
+    flex: 0 0 auto;
+    height: 32px;
+    padding: 0 16px;
+    white-space: nowrap;
+}
+
+.doc-search-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.doc-search-icon {
+    position: absolute;
+    left: 10px;
+    width: 14px;
+    height: 14px;
+    color: var(--text-faint);
+    pointer-events: none;
+}
+
+#documents-search {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px 0 30px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    color: var(--text);
+    font-size: 0.82em;
+    outline: none;
+    transition: border-color var(--dur-fast);
+}
+
+#documents-search:focus { border-color: var(--primary); }
+
+/* Themed searchable (multi-)select, replacing the native <select> for the
+   Folder/Tags filters - built on the app's existing .dropdown-menu system
+   (see createFilterDropdown in script.js) rather than fighting browser
+   default select styling. */
+.filter-select-trigger {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    width: 100%;
+    min-height: 32px;
+    padding: 0 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    color: var(--text);
+    font-size: 0.8em;
+    font-weight: 600;
+    text-align: left;
+    outline: none;
+    cursor: pointer;
+    transition: border-color var(--dur-fast);
+}
+
+.filter-select-trigger:hover, .dropdown.open .filter-select-trigger { border-color: var(--primary); }
+
+.filter-select-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+
+.filter-select-trigger .chevron { flex-shrink: 0; color: var(--text-faint); }
+
+.filter-select-menu {
+    min-width: 190px;
+    max-width: 260px;
+    padding: 6px;
+}
+
+/* The rightmost filter in the row would otherwise open left-aligned and
+   overflow past the panel's edge - anchor it from the right instead. */
+.filter-select-menu.align-right {
+    left: auto;
+    right: 0;
+    transform-origin: top right;
+}
+
+.filter-select-search-wrap {
+    padding: 0 0 6px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+
+.filter-select-search {
+    width: 100%;
+    height: 30px;
+    padding: 0 9px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.82em;
+    outline: none;
+    transition: border-color var(--dur-fast);
+}
+
+.filter-select-search:focus { border-color: var(--primary); }
+
+.filter-select-options {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.doc-folder-select:focus { border-color: var(--primary); }
+
+.tag-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 9px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    color: var(--text-muted);
+    font-size: 0.72em;
+    font-weight: 600;
+    cursor: pointer;
+    transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
+}
+
+.tag-chip:hover { border-color: var(--primary); color: var(--primary); }
 
 #documents-list {
     list-style: none;
@@ -1834,8 +2058,8 @@ input[type="range"]::-moz-range-thumb {
 #documents-list li {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 11px 12px;
+    gap: 8px;
+    padding: 9px 10px 9px 12px;
     border-radius: var(--radius-md);
     background: var(--surface-alt);
     border: 1px solid var(--border);
@@ -1871,15 +2095,28 @@ input[type="range"]::-moz-range-thumb {
 
 .doc-actions {
     display: flex;
-    gap: 4px;
+    gap: 2px;
     flex-shrink: 0;
+    opacity: 0;
+    transform: translateX(4px);
+    transition: opacity var(--dur-fast), transform var(--dur-fast);
+}
+
+/* Edit/delete only appear when they're actually relevant - hovering or
+   focusing the row, or the row being the one currently open - instead of
+   permanently taking up visual weight on every card. */
+#documents-list li:hover .doc-actions,
+#documents-list li:focus-within .doc-actions,
+#documents-list li.active-doc .doc-actions {
+    opacity: 1;
+    transform: translateX(0);
 }
 
 .doc-action-btn {
     display: grid;
     place-items: center;
-    width: 28px;
-    height: 28px;
+    width: 26px;
+    height: 26px;
     border-radius: var(--radius-sm);
     border: none;
     background: transparent;
@@ -1891,6 +2128,86 @@ input[type="range"]::-moz-range-thumb {
 .doc-action-btn svg { width: 14px; height: 14px; }
 .doc-action-btn:hover { background: var(--surface); color: var(--primary); }
 .doc-action-btn.delete:hover { color: var(--danger); }
+
+.doc-name-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.doc-name-row .doc-name { min-width: 0; }
+
+.doc-folder-badge {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    height: 17px;
+    padding: 0 7px;
+    border-radius: var(--radius-pill);
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text-muted);
+    font-size: 0.66em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: border-color var(--dur-fast), color var(--dur-fast);
+}
+
+.doc-folder-badge:hover { border-color: var(--primary); color: var(--primary); }
+
+.doc-folder-badge-icon { display: flex; }
+.doc-folder-badge-icon svg { width: 9px; height: 9px; }
+
+/* Word count/time and tags now share a single line under the title. */
+.doc-meta-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+    row-gap: 3px;
+}
+
+.doc-meta-row .tag-chip {
+    height: 17px;
+    padding: 0 7px;
+    font-size: 0.66em;
+}
+
+#documents-list li.editing {
+    align-items: stretch;
+    cursor: default;
+}
+
+.doc-edit-form {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.doc-edit-form input {
+    height: 30px;
+    padding: 0 9px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 0.8em;
+    outline: none;
+    transition: border-color var(--dur-fast);
+}
+
+.doc-edit-form input:focus { border-color: var(--primary); }
+
+.doc-edit-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+}
+
+.doc-edit-actions .fr-btn { flex: 1; justify-content: center; }
 
 /* ============ Toasts ============ */
 #toast-container {
@@ -1939,6 +2256,7 @@ input[type="range"]::-moz-range-thumb {
 .toast.success .toast-icon { background: var(--success); }
 .toast.error .toast-icon { background: var(--danger); }
 .toast.info .toast-icon { background: var(--primary); }
+.toast.delete .toast-icon { background: var(--text-muted); }
 
 @keyframes toast-in {
     from { opacity: 0; transform: translateX(40px) scale(0.95); }

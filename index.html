@@ -37,6 +37,7 @@
                 </button>
                 <button id="documents-btn" class="icon-btn" title="Documents (Ctrl+Alt+D)" aria-label="Open documents">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5V6a2 2 0 0 1 2-2h8l4 4v11.5a1.5 1.5 0 0 1-1.5 1.5H5.5A1.5 1.5 0 0 1 4 19.5Z"/><path d="M14 4v4h4"/></svg>
+                    <span class="icon-badge hidden" id="documents-count-badge">0</span>
                 </button>
                 <button id="focus-mode-toggle" class="icon-btn" title="Focus mode (Ctrl+Alt+F)" aria-label="Toggle focus mode">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m8 0h3a2 2 0 0 0 2-2v-3"/></svg>
@@ -313,21 +314,54 @@
     <aside id="documents-panel" class="hidden drawer-left" aria-hidden="true">
         <div class="settings-header">
             <h2>Documents</h2>
-            <button id="documents-close" class="icon-btn small" aria-label="Close documents">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
-            </button>
+            <div class="settings-header-actions">
+                <button id="new-document-btn" class="icon-btn small primary-fill" title="New blank document" aria-label="New blank document">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+                <button id="documents-close" class="icon-btn small" aria-label="Close documents">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                </button>
+            </div>
         </div>
         <div class="settings-body">
-            <button id="new-document-btn" class="new-doc-btn">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-                New blank document
-            </button>
-            <div class="save-as-row">
-                <input type="text" id="save-as-input" placeholder="Name this document…" maxlength="60">
-                <button id="save-as-btn" class="fr-btn primary">Save</button>
+            <div class="doc-create-group">
+                <div class="field-row">
+                    <div class="field field-folder">
+                        <label for="save-as-folder">Folder</label>
+                        <input type="text" id="save-as-folder" placeholder="Optional" maxlength="60" list="documents-folder-list" autocomplete="off">
+                    </div>
+                    <div class="field">
+                        <label for="save-as-tags">Tags</label>
+                        <input type="text" id="save-as-tags" placeholder="Comma separated" maxlength="150" autocomplete="off">
+                    </div>
+                    <button id="save-as-btn" class="fr-btn primary save-as-btn-inline">Save</button>
+                </div>
+                <datalist id="documents-folder-list"></datalist>
             </div>
+
+            <div class="doc-filter-group">
+                <div class="field-row">
+                    <div class="field field-search">
+                        <label for="documents-search">Search</label>
+                        <div class="doc-search-wrap">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="doc-search-icon"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M20 20l-4.3-4.3"/></svg>
+                            <input type="text" id="documents-search" placeholder="Name or tag…" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="field">
+                        <label id="documents-folder-filter-label">Folder</label>
+                        <div id="documents-folder-filter-mount"></div>
+                    </div>
+                    <div class="field">
+                        <label id="documents-tag-filter-label">Tags</label>
+                        <div id="documents-tag-filter-mount"></div>
+                    </div>
+                </div>
+            </div>
+
             <ul id="documents-list"></ul>
             <p class="empty-state" id="documents-empty">No saved documents yet. Save your current text to start building a library.</p>
+            <p class="empty-state hidden" id="documents-no-results">No documents match your search or filters.</p>
         </div>
     </aside>
 

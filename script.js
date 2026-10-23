@@ -103,13 +103,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const commandPaletteList = document.getElementById('command-palette-list');
 
     const documentsBtn = document.getElementById('documents-btn');
+    const documentsCountBadge = document.getElementById('documents-count-badge');
     const documentsPanel = document.getElementById('documents-panel');
     const documentsClose = document.getElementById('documents-close');
     const newDocumentBtn = document.getElementById('new-document-btn');
-    const saveAsInput = document.getElementById('save-as-input');
     const saveAsBtn = document.getElementById('save-as-btn');
+    const saveAsFolderInput = document.getElementById('save-as-folder');
+    const saveAsTagsInput = document.getElementById('save-as-tags');
+    const documentsFolderList = document.getElementById('documents-folder-list');
+    const documentsSearchInput = document.getElementById('documents-search');
+    const documentsFolderFilterMount = document.getElementById('documents-folder-filter-mount');
+    const documentsTagFilterMount = document.getElementById('documents-tag-filter-mount');
     const documentsList = document.getElementById('documents-list');
     const documentsEmpty = document.getElementById('documents-empty');
+    const documentsNoResults = document.getElementById('documents-no-results');
 
     const checkboxes = {
         charCount: document.getElementById('toggle-characters'),
@@ -135,7 +142,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const TOAST_ICONS = {
         success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>',
         error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 6l12 12M18 6 6 18"/></svg>',
-        info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v.01M12 11v5"/></svg>'
+        info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v.01M12 11v5"/></svg>',
+        delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>'
     };
 
     function showToast(type, message, duration = 2800) {
@@ -629,6 +637,149 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (!e.target.closest('.dropdown')) closeAllDropdowns();
     });
+
+    // A plain <select> can't be restyled reliably across browsers (its own
+    // native chrome kept overriding height/appearance even with resets) and
+    // doesn't support search or picking more than one value. This builds a
+    // themed, searchable (optionally multi-select) dropdown on top of the
+    // same .dropdown/.dropdown-menu system above, so it opens/closes and
+    // animates exactly like the toolbar's existing Case/Export/Goal menus.
+    function createFilterDropdown({ mount, allLabel, multi, onChange, align }) {
+        const root = document.createElement('div');
+        root.className = 'dropdown filter-dropdown';
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'dropdown-trigger filter-select-trigger';
+        trigger.setAttribute('aria-haspopup', 'true');
+        trigger.setAttribute('aria-expanded', 'false');
+
+        const label = document.createElement('span');
+        label.className = 'filter-select-label';
+        trigger.appendChild(label);
+        trigger.insertAdjacentHTML('beforeend', '<svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>');
+
+        const menu = document.createElement('div');
+        menu.className = 'dropdown-menu filter-select-menu' + (align === 'right' ? ' align-right' : '');
+        menu.setAttribute('role', 'menu');
+
+        const searchWrap = document.createElement('div');
+        searchWrap.className = 'filter-select-search-wrap';
+        const searchInput = document.createElement('input');
+        searchInput.type = 'text';
+        searchInput.placeholder = 'Search…';
+        searchInput.className = 'filter-select-search';
+        searchWrap.appendChild(searchInput);
+
+        const optionsWrap = document.createElement('div');
+        optionsWrap.className = 'filter-select-options';
+
+        menu.append(searchWrap, optionsWrap);
+        root.append(trigger, menu);
+        mount.appendChild(root);
+
+        let values = [];
+        let selected = multi ? new Set() : '';
+
+        function updateLabel() {
+            if (multi) {
+                const n = selected.size;
+                label.textContent = n === 0 ? allLabel : n === 1 ? [...selected][0] : `${n} selected`;
+            } else {
+                label.textContent = selected || allLabel;
+            }
+        }
+
+        // Selecting an option only updates .selected classes in place - it
+        // must NOT rebuild/remove the button that was just clicked. Doing so
+        // mid-bubble detaches it from the tree before the click event
+        // reaches document's "click outside a .dropdown closes it" listener,
+        // which then reads closest('.dropdown') as null on the now-parentless
+        // target and closes the menu even in multi-select mode.
+        function updateOptionStates() {
+            const allBtn = optionsWrap.querySelector('[data-all]');
+            if (allBtn) allBtn.classList.toggle('selected', multi ? selected.size === 0 : selected === '');
+            optionsWrap.querySelectorAll('[data-value]').forEach(btn => {
+                const v = btn.dataset.value;
+                btn.classList.toggle('selected', multi ? selected.has(v) : selected === v);
+            });
+        }
+
+        function selectValue(value) {
+            if (multi) {
+                selected.has(value) ? selected.delete(value) : selected.add(value);
+            } else {
+                selected = value;
+                closeDropdown(root);
+            }
+            updateLabel();
+            updateOptionStates();
+            onChange(multi ? [...selected] : selected);
+        }
+
+        function selectAll() {
+            multi ? selected.clear() : (selected = '');
+            updateLabel();
+            updateOptionStates();
+            onChange(multi ? [...selected] : selected);
+            if (!multi) closeDropdown(root);
+        }
+
+        // Full rebuild - only called when the option *list itself* changes
+        // (typing in search, or setOptions() picking up new values), never
+        // from inside an option's own click handler.
+        function renderOptions(filterText) {
+            optionsWrap.innerHTML = '';
+            const q = filterText.trim().toLowerCase();
+
+            const allBtn = document.createElement('button');
+            allBtn.type = 'button';
+            allBtn.dataset.all = '';
+            allBtn.textContent = allLabel;
+            allBtn.addEventListener('click', selectAll);
+            optionsWrap.appendChild(allBtn);
+
+            values
+                .filter(v => !q || v.toLowerCase().includes(q))
+                .forEach(value => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.dataset.value = value;
+                    btn.textContent = value;
+                    btn.addEventListener('click', () => selectValue(value));
+                    optionsWrap.appendChild(btn);
+                });
+
+            updateOptionStates();
+        }
+
+        searchInput.addEventListener('input', () => renderOptions(searchInput.value));
+        searchInput.addEventListener('keydown', (e) => e.stopPropagation());
+
+        updateLabel();
+        renderOptions('');
+
+        return {
+            setOptions(newValues) {
+                values = newValues;
+                if (multi) {
+                    [...selected].forEach(v => { if (!values.includes(v)) selected.delete(v); });
+                } else if (selected && !values.includes(selected)) {
+                    selected = '';
+                }
+                updateLabel();
+                renderOptions(searchInput.value);
+            },
+            getValue() { return multi ? [...selected] : selected; },
+            setValues(newSelection) {
+                if (multi) { selected = new Set(newSelection); }
+                else { selected = newSelection[0] || ''; }
+                updateLabel();
+                renderOptions(searchInput.value);
+                onChange(multi ? [...selected] : selected);
+            }
+        };
+    }
 
     /* ---------- case conversion ---------- */
     const SMALL_WORDS = new Set(['a', 'an', 'the', 'and', 'or', 'but', 'of', 'in', 'on', 'to', 'for', 'with', 'at', 'by', 'from', 'as', 'is']);
@@ -1841,17 +1992,38 @@ document.addEventListener('DOMContentLoaded', () => {
         settingsSyncTimer = setTimeout(saveSettingsToDrive, 800);
     }
 
-    async function driveListDocuments() {
-        const q = encodeURIComponent(`'${driveFolderId}' in parents and trashed=false`);
-        const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc`);
+    // Folders are real Drive subfolders one level under the app's root
+    // folder (driveFolderId), so a document's "folder" field maps directly
+    // onto where the file actually lives in the user's own Drive.
+    async function driveListFilesInFolder(folderId, folderLabel) {
+        const q = encodeURIComponent(`'${folderId}' in parents and trashed=false and mimeType != 'application/vnd.google-apps.folder'`);
+        const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime,properties)&orderBy=modifiedTime desc`);
         const data = await res.json();
         return (data.files || []).map(f => ({
             id: f.id,
             name: f.name,
             updatedAt: new Date(f.modifiedTime).getTime(),
             content: null,
-            isDrive: true
+            isDrive: true,
+            folder: folderLabel,
+            tags: (f.properties && f.properties.tags) ? f.properties.tags.split(',').filter(Boolean) : []
         }));
+    }
+
+    async function driveListSubfolders() {
+        const q = encodeURIComponent(`'${driveFolderId}' in parents and trashed=false and mimeType='application/vnd.google-apps.folder'`);
+        const res = await driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+        const data = await res.json();
+        return data.files || [];
+    }
+
+    async function driveListDocuments() {
+        const subfolders = await driveListSubfolders();
+        const lists = await Promise.all([
+            driveListFilesInFolder(driveFolderId, ''),
+            ...subfolders.map(f => driveListFilesInFolder(f.id, f.name))
+        ]);
+        return lists.flat();
     }
 
     async function driveGetContent(fileId) {
@@ -1862,28 +2034,61 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function driveSaveDocument(doc) {
+        const parentId = doc.folder ? await findOrCreateFolder(doc.folder, driveFolderId) : driveFolderId;
+        const properties = (doc.tags && doc.tags.length) ? { tags: doc.tags.join(',') } : {};
         const boundary = `ccpro-${Math.random().toString(36).slice(2)}`;
-        const metadata = doc.id ? { name: doc.name } : { name: doc.name, parents: [driveFolderId] };
+        const metadata = { name: doc.name, parents: [parentId], properties };
         const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`
             + `--${boundary}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n${doc.content}\r\n--${boundary}--`;
-        const url = doc.id
-            ? `https://www.googleapis.com/upload/drive/v3/files/${doc.id}?uploadType=multipart`
-            : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-        const res = await driveFetch(url, {
-            method: doc.id ? 'PATCH' : 'POST',
+        const res = await driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method: 'POST',
             headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
             body
         });
         const saved = await res.json();
-        return { id: saved.id, name: doc.name, content: doc.content, updatedAt: Date.now(), isDrive: true };
+        return { id: saved.id, name: doc.name, content: doc.content, updatedAt: Date.now(), isDrive: true, folder: doc.folder || '', tags: doc.tags || [] };
     }
 
-    async function driveRenameDocument(id, name) {
-        await driveFetch(`https://www.googleapis.com/drive/v3/files/${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name })
-        });
+    // Covers rename, tag edits, content overwrites, and moving a document
+    // into a (possibly new) folder. The folder move needs its own call with
+    // explicit addParents/removeParents params - Drive's regular metadata
+    // PATCH can't relocate a file - so it's issued separately from the
+    // name/tags/content update.
+    async function driveUpdateDocument(id, patch) {
+        if (patch.folder !== undefined) {
+            const newParentId = patch.folder ? await findOrCreateFolder(patch.folder, driveFolderId) : driveFolderId;
+            const currentRes = await driveFetch(`https://www.googleapis.com/drive/v3/files/${id}?fields=parents`);
+            const current = await currentRes.json();
+            const oldParents = (current.parents || []).filter(p => p !== newParentId);
+            const params = [`addParents=${encodeURIComponent(newParentId)}`];
+            if (oldParents.length) params.push(`removeParents=${encodeURIComponent(oldParents.join(','))}`);
+            await driveFetch(`https://www.googleapis.com/drive/v3/files/${id}?${params.join('&')}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({})
+            });
+        }
+
+        const metadata = {};
+        if (patch.name !== undefined) metadata.name = patch.name;
+        if (patch.tags !== undefined) metadata.properties = { tags: patch.tags.join(',') };
+
+        if (patch.content !== undefined) {
+            const boundary = `ccpro-${Math.random().toString(36).slice(2)}`;
+            const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`
+                + `--${boundary}\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n${patch.content}\r\n--${boundary}--`;
+            await driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=multipart`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+                body
+            });
+        } else if (Object.keys(metadata).length) {
+            await driveFetch(`https://www.googleapis.com/drive/v3/files/${id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(metadata)
+            });
+        }
     }
 
     async function driveDeleteDocument(fileId) {
@@ -1978,17 +2183,19 @@ document.addEventListener('DOMContentLoaded', () => {
         },
         async save(doc) {
             if (isDriveActive()) return driveSaveDocument(doc);
-            const saved = { ...doc, id: doc.id || Date.now().toString(36) };
+            const saved = { folder: '', tags: [], ...doc, id: doc.id || Date.now().toString(36) };
             await idbPut(saved);
             return saved;
         },
-        async rename(id, name) {
-            if (isDriveActive()) { await driveRenameDocument(id, name); return; }
+        // patch may include any of {name, folder, tags, content} - used for
+        // renames, tag edits, moving a document into a different folder, and
+        // overwriting an already-saved document's content in place.
+        async update(id, patch) {
+            if (isDriveActive()) { await driveUpdateDocument(id, patch); return; }
             const docs = await idbGetAll();
             const doc = docs.find(d => d.id === id);
             if (!doc) return;
-            doc.name = name;
-            doc.updatedAt = Date.now();
+            Object.assign(doc, patch, { updatedAt: Date.now() });
             await idbPut(doc);
         },
         async delete(id) {
@@ -2001,6 +2208,27 @@ document.addEventListener('DOMContentLoaded', () => {
     let activeDocId = null;
     let documentsCache = [];
 
+    // Which document is open needs to survive a refresh too, not just its
+    // text - otherwise the title reverts to blank/draft every reload even
+    // though the content (saved separately as the autosave draft) is fine.
+    function setActiveDocId(id) {
+        activeDocId = id;
+        if (id) localStorage.setItem('activeDocId', id);
+        else localStorage.removeItem('activeDocId');
+    }
+
+    function restoreActiveDocumentTitle() {
+        const storedId = localStorage.getItem('activeDocId');
+        if (!storedId) return;
+        const meta = documentsCache.find(d => d.id === storedId);
+        if (meta) {
+            activeDocId = meta.id;
+            documentTitleInput.value = meta.name;
+        } else {
+            setActiveDocId(null);
+        }
+    }
+
     function timeAgo(ts) {
         const mins = Math.floor((Date.now() - ts) / 60000);
         if (mins < 1) return 'just now';
@@ -2010,49 +2238,213 @@ document.addEventListener('DOMContentLoaded', () => {
         return `${Math.floor(hours / 24)}d ago`;
     }
 
+    // Search/filter state for the documents panel - kept separate from
+    // documentsCache so typing in the search box or changing a filter just
+    // re-renders the list from the already-fetched cache, no refetch needed.
+    let docSearchQuery = '';
+    let editingDocId = null;
+
+    const folderFilterDropdown = createFilterDropdown({
+        mount: documentsFolderFilterMount,
+        allLabel: 'All folders',
+        multi: true,
+        onChange: () => { editingDocId = null; renderDocumentsList(); }
+    });
+    const tagFilterDropdown = createFilterDropdown({
+        mount: documentsTagFilterMount,
+        allLabel: 'All tags',
+        multi: true,
+        align: 'right',
+        onChange: () => { editingDocId = null; renderDocumentsList(); }
+    });
+
+    function renderDocumentFilters() {
+        const folders = [...new Set(documentsCache.map(d => d.folder).filter(Boolean))].sort();
+        folderFilterDropdown.setOptions(folders);
+
+        documentsFolderList.innerHTML = '';
+        folders.forEach(folder => {
+            const opt = document.createElement('option');
+            opt.value = folder;
+            documentsFolderList.appendChild(opt);
+        });
+
+        const tags = [...new Set(documentsCache.flatMap(d => d.tags || []))].sort();
+        tagFilterDropdown.setOptions(tags);
+    }
+
+    function buildDocListItem(doc) {
+        const li = document.createElement('li');
+        li.classList.toggle('active-doc', doc.id === activeDocId);
+
+        if (editingDocId === doc.id) {
+            li.classList.add('editing');
+            const form = document.createElement('div');
+            form.className = 'doc-edit-form';
+
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.maxLength = 60;
+            nameInput.value = doc.name;
+            nameInput.placeholder = 'Document name';
+
+            const folderInput = document.createElement('input');
+            folderInput.type = 'text';
+            folderInput.maxLength = 60;
+            folderInput.value = doc.folder || '';
+            folderInput.placeholder = 'Folder (optional)';
+            folderInput.setAttribute('list', 'documents-folder-list');
+
+            const tagsInput = document.createElement('input');
+            tagsInput.type = 'text';
+            tagsInput.maxLength = 150;
+            tagsInput.value = (doc.tags || []).join(', ');
+            tagsInput.placeholder = 'Tags, comma separated';
+
+            const actionsRow = document.createElement('div');
+            actionsRow.className = 'doc-edit-actions';
+            const saveBtn = document.createElement('button');
+            saveBtn.type = 'button';
+            saveBtn.className = 'fr-btn primary';
+            saveBtn.textContent = 'Save';
+            saveBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const name = nameInput.value.trim().slice(0, 60) || doc.name;
+                const folder = folderInput.value.trim().slice(0, 60);
+                const tags = tagsInput.value.split(',').map(t => t.trim()).filter(Boolean).slice(0, 15);
+                await DocStore.update(doc.id, { name, folder, tags });
+                if (doc.id === activeDocId) documentTitleInput.value = name;
+                editingDocId = null;
+                renderDocuments();
+                showToast('success', 'Document updated');
+            });
+            const cancelBtn = document.createElement('button');
+            cancelBtn.type = 'button';
+            cancelBtn.className = 'fr-btn';
+            cancelBtn.textContent = 'Cancel';
+            cancelBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                editingDocId = null;
+                renderDocumentsList();
+            });
+            actionsRow.append(saveBtn, cancelBtn);
+
+            form.append(nameInput, folderInput, tagsInput, actionsRow);
+            li.appendChild(form);
+            return li;
+        }
+
+        const info = document.createElement('div');
+        info.className = 'doc-info';
+
+        const nameRow = document.createElement('div');
+        nameRow.className = 'doc-name-row';
+        const name = document.createElement('span');
+        name.className = 'doc-name';
+        name.textContent = doc.name;
+        nameRow.appendChild(name);
+        if (doc.folder) {
+            const folderBadge = document.createElement('button');
+            folderBadge.type = 'button';
+            folderBadge.className = 'doc-folder-badge';
+            folderBadge.title = `Filter by folder "${doc.folder}"`;
+            const folderIcon = document.createElement('span');
+            folderIcon.className = 'doc-folder-badge-icon';
+            folderIcon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M4 7a2 2 0 0 1 2-2h3.5l1.5 2H18a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7Z"/></svg>';
+            const folderText = document.createElement('span');
+            folderText.textContent = doc.folder;
+            folderBadge.append(folderIcon, folderText);
+            folderBadge.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const current = folderFilterDropdown.getValue();
+                folderFilterDropdown.setValues(current.length === 1 && current[0] === doc.folder ? [] : [doc.folder]);
+            });
+            nameRow.appendChild(folderBadge);
+        }
+
+        // Word count/time and tags share one line instead of each getting
+        // their own row - noticeably shorter cards with no loss of info.
+        const metaRow = document.createElement('div');
+        metaRow.className = 'doc-meta-row';
+        const wordTotal = doc.content != null ? (htmlToPlainText(doc.content).match(/[\p{L}\p{M}]+/gu) || []).length : null;
+        const meta = document.createElement('span');
+        meta.className = 'doc-meta';
+        meta.textContent = [doc.isDrive ? 'Drive' : null, wordTotal !== null ? `${wordTotal} words` : null, timeAgo(doc.updatedAt)]
+            .filter(Boolean).join(' · ');
+        metaRow.appendChild(meta);
+
+        if (doc.tags && doc.tags.length) {
+            doc.tags.forEach(tag => {
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'tag-chip';
+                chip.textContent = tag;
+                chip.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const current = tagFilterDropdown.getValue();
+                    tagFilterDropdown.setValues(current.length === 1 && current[0] === tag ? [] : [tag]);
+                });
+                metaRow.appendChild(chip);
+            });
+        }
+
+        info.append(nameRow, metaRow);
+
+        info.addEventListener('click', () => loadDocument(doc.id));
+
+        const actions = document.createElement('div');
+        actions.className = 'doc-actions';
+
+        const editBtn = document.createElement('button');
+        editBtn.className = 'doc-action-btn';
+        editBtn.title = 'Edit name, folder & tags';
+        editBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+        editBtn.addEventListener('click', (e) => { e.stopPropagation(); editingDocId = doc.id; renderDocumentsList(); });
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'doc-action-btn delete';
+        deleteBtn.title = 'Delete';
+        deleteBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>';
+        deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteDocument(doc.id, doc.name); });
+
+        actions.append(editBtn, deleteBtn);
+        li.append(info, actions);
+        return li;
+    }
+
+    function renderDocumentsList() {
+        const q = docSearchQuery.trim().toLowerCase();
+        const folderFilters = folderFilterDropdown.getValue();
+        const tagFilters = tagFilterDropdown.getValue();
+        const filtered = documentsCache.filter(doc => {
+            if (folderFilters.length && !folderFilters.includes(doc.folder || '')) return false;
+            if (tagFilters.length && !(doc.tags || []).some(t => tagFilters.includes(t))) return false;
+            if (q) {
+                const haystack = [doc.name, doc.folder, ...(doc.tags || [])].filter(Boolean).join(' ').toLowerCase();
+                if (!haystack.includes(q)) return false;
+            }
+            return true;
+        });
+
+        documentsList.innerHTML = '';
+        documentsNoResults.classList.toggle('hidden', !(documentsCache.length > 0 && filtered.length === 0));
+        filtered.forEach(doc => documentsList.appendChild(buildDocListItem(doc)));
+    }
+
     async function renderDocuments() {
         documentsCache = (await DocStore.list()).sort((a, b) => b.updatedAt - a.updatedAt);
-        documentsList.innerHTML = '';
         documentsEmpty.classList.toggle('hidden', documentsCache.length !== 0);
-        documentsBtn.classList.toggle('attn', documentsCache.length > 0);
-
-        documentsCache.forEach(doc => {
-            const li = document.createElement('li');
-            li.classList.toggle('active-doc', doc.id === activeDocId);
-
-            const info = document.createElement('div');
-            info.className = 'doc-info';
-            const name = document.createElement('span');
-            name.className = 'doc-name';
-            name.textContent = doc.name;
-            const wordTotal = doc.content != null ? (htmlToPlainText(doc.content).match(/[\p{L}\p{M}]+/gu) || []).length : null;
-            const meta = document.createElement('span');
-            meta.className = 'doc-meta';
-            meta.textContent = [doc.isDrive ? 'Drive' : null, wordTotal !== null ? `${wordTotal} words` : null, timeAgo(doc.updatedAt)]
-                .filter(Boolean).join(' · ');
-            info.append(name, meta);
-            info.addEventListener('click', () => loadDocument(doc.id));
-
-            const actions = document.createElement('div');
-            actions.className = 'doc-actions';
-
-            const renameBtn = document.createElement('button');
-            renameBtn.className = 'doc-action-btn';
-            renameBtn.title = 'Rename';
-            renameBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
-            renameBtn.addEventListener('click', (e) => { e.stopPropagation(); renameDocument(doc.id, doc.name); });
-
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'doc-action-btn delete';
-            deleteBtn.title = 'Delete';
-            deleteBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>';
-            deleteBtn.addEventListener('click', (e) => { e.stopPropagation(); deleteDocument(doc.id, doc.name); });
-
-            actions.append(renameBtn, deleteBtn);
-            li.append(info, actions);
-            documentsList.appendChild(li);
-        });
+        documentsCountBadge.textContent = documentsCache.length > 99 ? '99+' : documentsCache.length;
+        documentsCountBadge.classList.toggle('hidden', documentsCache.length === 0);
+        renderDocumentFilters();
+        renderDocumentsList();
     }
+
+    documentsSearchInput.addEventListener('input', () => {
+        docSearchQuery = documentsSearchInput.value;
+        editingDocId = null;
+        renderDocumentsList();
+    });
 
     async function loadDocument(id) {
         const meta = documentsCache.find(d => d.id === id);
@@ -2065,7 +2457,7 @@ document.addEventListener('DOMContentLoaded', () => {
             content = plainTextToEditableHtml(content);
         }
         textInput.innerHTML = content;
-        activeDocId = id;
+        setActiveDocId(id);
         documentTitleInput.value = meta.name;
         updateCounts();
         snapshotHistory(textInput.innerHTML);
@@ -2073,29 +2465,28 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('success', `Loaded "${meta.name}"`);
     }
 
-    async function renameDocument(id, currentName) {
-        const name = window.prompt('Rename document', currentName);
-        if (!name || !name.trim()) return;
-        const trimmed = name.trim().slice(0, 60);
-        await DocStore.rename(id, trimmed);
-        if (id === activeDocId) documentTitleInput.value = trimmed;
-        renderDocuments();
-        showToast('success', 'Document renamed');
-    }
-
     async function deleteDocument(id, name) {
         if (!window.confirm(`Delete "${name}"? This can't be undone.`)) return;
         await DocStore.delete(id);
-        if (activeDocId === id) activeDocId = null;
+        if (activeDocId === id) setActiveDocId(null);
+        if (editingDocId === id) editingDocId = null;
         renderDocuments();
-        showToast('info', 'Document deleted');
+        showToast('delete', 'Document deleted');
     }
 
-    documentsBtn.addEventListener('click', (e) => {
+    documentsBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        renderDocuments();
-        if (!saveAsInput.value.trim() && documentTitleInput.value.trim()) {
-            saveAsInput.value = documentTitleInput.value.trim();
+        await renderDocuments();
+        // Pre-fill folder/tags from whichever document is already open, so
+        // clicking Save doesn't silently wipe them - but only when both
+        // fields are still untouched, so closing and reopening the panel
+        // never clobbers something the user already typed.
+        if (!saveAsFolderInput.value.trim() && !saveAsTagsInput.value.trim()) {
+            const activeMeta = activeDocId ? documentsCache.find(d => d.id === activeDocId) : null;
+            if (activeMeta) {
+                saveAsFolderInput.value = activeMeta.folder || '';
+                saveAsTagsInput.value = (activeMeta.tags || []).join(', ');
+            }
         }
         documentsPanel.classList.contains('show') ? closeActivePanel() : openDrawer(documentsPanel);
     });
@@ -2103,10 +2494,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     newDocumentBtn.addEventListener('click', () => {
         textInput.innerHTML = '';
-        activeDocId = null;
+        setActiveDocId(null);
         documentTitleInput.value = '';
         draftTitle = '';
         localStorage.removeItem('draftTitle');
+        saveAsFolderInput.value = '';
+        saveAsTagsInput.value = '';
         updateCounts();
         snapshotHistory(textInput.innerHTML);
         renderDocuments();
@@ -2114,20 +2507,28 @@ document.addEventListener('DOMContentLoaded', () => {
         showToast('info', 'Started a new blank document');
     });
 
+    // The document's name lives in the main toolbar's title field, not here
+    // - this button just saves (or updates, if one's already open) the
+    // current content under that name with this panel's folder/tags.
     saveAsBtn.addEventListener('click', async () => {
-        const name = saveAsInput.value.trim() || documentTitleInput.value.trim();
-        if (!name) { showToast('error', 'Give your document a name first'); return; }
-        const saved = await DocStore.save({ name: name.slice(0, 60), content: textInput.innerHTML, updatedAt: Date.now() });
-        activeDocId = saved.id;
-        documentTitleInput.value = name.slice(0, 60);
+        const name = documentTitleInput.value.trim().slice(0, 60);
+        if (!name) { showToast('error', 'Give your document a title first'); return; }
+        const folder = saveAsFolderInput.value.trim().slice(0, 60);
+        const tags = saveAsTagsInput.value.split(',').map(t => t.trim()).filter(Boolean).slice(0, 15);
+
+        if (activeDocId) {
+            await DocStore.update(activeDocId, { name, content: textInput.innerHTML, folder, tags });
+            showToast('success', `Updated "${name}"`);
+        } else {
+            const saved = await DocStore.save({ name, content: textInput.innerHTML, folder, tags, updatedAt: Date.now() });
+            setActiveDocId(saved.id);
+            showToast('success', `Saved "${name}"`);
+        }
+
         draftTitle = '';
         localStorage.removeItem('draftTitle');
-        saveAsInput.value = '';
         renderDocuments();
-        showToast('success', `Saved "${name}"`);
     });
-
-    saveAsInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveAsBtn.click(); });
 
     /* ---------- document title (toolbar) ---------- */
     let draftTitle = localStorage.getItem('draftTitle') || '';
@@ -2139,7 +2540,7 @@ document.addEventListener('DOMContentLoaded', () => {
             titleRenameTimer = setTimeout(async () => {
                 const name = documentTitleInput.value.trim();
                 if (!name) return;
-                await DocStore.rename(activeDocId, name.slice(0, 60));
+                await DocStore.update(activeDocId, { name: name.slice(0, 60) });
                 renderDocuments();
             }, 500);
         } else {
@@ -2306,7 +2707,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (storedFocusMode) setFocusMode(true);
 
     updateDriveUI();
-    migrateLegacyDocuments().then(renderDocuments);
+    migrateLegacyDocuments().then(renderDocuments).then(restoreActiveDocumentTitle);
 
     history = [textInput.innerHTML];
     historyIndex = 0;
@@ -2315,12 +2716,25 @@ document.addEventListener('DOMContentLoaded', () => {
 
     updateCounts();
 
-    requestAnimationFrame(() => {
+    function restoreScrollAndCursor() {
         restoreScroll(textInput, 'editorScrollTop');
         restoreScroll(analyticsPanel, 'analyticsScrollTop');
         const savedOffset = localStorage.getItem('cursorOffset');
         if (savedOffset !== null && setCursorOffset(Number(savedOffset))) {
             textInput.focus();
         }
-    });
+    }
+
+    // The UI font (Inter, loaded from Google Fonts) swaps in after the
+    // fallback system font has already painted, which reflows line heights
+    // and silently drifts a restored scrollTop by a few lines. Restore once
+    // immediately so there's no visible jump back to the top, then restore
+    // again once web fonts have actually finished loading and metrics have
+    // settled, to land in the right place.
+    requestAnimationFrame(restoreScrollAndCursor);
+    if (document.fonts && document.fonts.ready) {
+        document.fonts.ready.then(() => requestAnimationFrame(restoreScrollAndCursor));
+    } else {
+        setTimeout(restoreScrollAndCursor, 300);
+    }
 });
