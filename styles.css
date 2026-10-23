@@ -49,7 +49,7 @@
     color-scheme: light;
 }
 
-body.dark-mode {
+html.dark-mode {
     --bg: #0c1013;
     --bg-grad-1: #0e1b1c;
     --bg-grad-2: #0d1620;
@@ -80,6 +80,89 @@ body.dark-mode {
 /* ============ Reset & base ============ */
 * { box-sizing: border-box; }
 
+/* ============ Smooth scrolling ============ */
+/* Every scrollable pane in the app: eased programmatic scrolls (restoring
+   scroll position, scrollIntoView on a keyboard-highlighted option, etc. -
+   manual wheel/trackpad scrolling is already native-smooth and untouched by
+   this), a composited layer so long text doesn't re-rasterize/shimmer on
+   every scroll frame, and a slim themed scrollbar instead of the stock
+   OS one, which is often thick, square and high-contrast enough against a
+   dark surface to read as harsh on its own. */
+#text-input,
+#analytics,
+#save-status-modal,
+#command-palette-list,
+.settings-body,
+.filter-select-options {
+    scroll-behavior: smooth;
+    will-change: scroll-position;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+}
+
+#text-input::-webkit-scrollbar,
+#analytics::-webkit-scrollbar,
+#save-status-modal::-webkit-scrollbar,
+#command-palette-list::-webkit-scrollbar,
+.settings-body::-webkit-scrollbar,
+.filter-select-options::-webkit-scrollbar {
+    width: 9px;
+}
+
+#text-input::-webkit-scrollbar-track,
+#analytics::-webkit-scrollbar-track,
+#save-status-modal::-webkit-scrollbar-track,
+#command-palette-list::-webkit-scrollbar-track,
+.settings-body::-webkit-scrollbar-track,
+.filter-select-options::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+#text-input::-webkit-scrollbar-thumb,
+#analytics::-webkit-scrollbar-thumb,
+#save-status-modal::-webkit-scrollbar-thumb,
+#command-palette-list::-webkit-scrollbar-thumb,
+.settings-body::-webkit-scrollbar-thumb,
+.filter-select-options::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background-color var(--dur-fast);
+}
+
+#text-input::-webkit-scrollbar-thumb:hover,
+#analytics::-webkit-scrollbar-thumb:hover,
+#save-status-modal::-webkit-scrollbar-thumb:hover,
+#command-palette-list::-webkit-scrollbar-thumb:hover,
+.settings-body::-webkit-scrollbar-thumb:hover,
+.filter-select-options::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    #text-input, #analytics, #save-status-modal, #command-palette-list,
+    .settings-body, .filter-select-options {
+        scroll-behavior: auto;
+    }
+}
+
+/* Applied briefly (see setTheme() in script.js) while the theme is actually
+   changing, so every surface eases between palettes together instead of
+   some elements snapping instantly while only the ones that happened to
+   already have a hover transition ease smoothly. Removed right after, so
+   it never slows down normal hover/focus interactions the rest of the
+   time. */
+html.theme-transitioning,
+html.theme-transitioning * {
+    transition: background-color var(--dur-med) var(--ease-out),
+                border-color var(--dur-med) var(--ease-out),
+                color var(--dur-med) var(--ease-out),
+                box-shadow var(--dur-med) var(--ease-out),
+                fill var(--dur-med) var(--ease-out),
+                stroke var(--dur-med) var(--ease-out);
+}
+
 html, body {
     margin: 0;
     padding: 0;
@@ -101,7 +184,7 @@ button, select, input {
 }
 
 /* Fallback for contexts that block the real Fullscreen API (an embedding
-   iframe/webview without fullscreen permission) — pins the app over the
+   iframe/webview without fullscreen permission) - pins the app over the
    entire viewport so focus mode still reads as full-screen either way. */
 body.pseudo-fullscreen {
     position: fixed;
@@ -134,37 +217,43 @@ body.pseudo-fullscreen {
     transition: background var(--dur-slow) var(--ease-out);
 }
 
+/* A real blur filter here forces the browser to recompute the blur on
+   every single animation frame for as long as the page is open (confirmed
+   by profiling: idle frame rate was capped at ~25fps system-wide with
+   these present, vs a clean 60fps with them removed - not a scroll issue
+   at all, just a permanently running expensive repaint). A radial gradient
+   that fades to transparent gives the same soft glow with zero filter
+   cost, since it composites like any other flat color. */
 .blob {
     position: absolute;
     border-radius: 50%;
-    filter: blur(70px);
     opacity: 0.35;
     will-change: transform;
 }
 
 .blob-1 {
     width: 480px; height: 480px;
-    background: var(--primary);
+    background: radial-gradient(circle, var(--primary) 0%, transparent 70%);
     top: -160px; left: -120px;
     animation: float-1 22s ease-in-out infinite;
 }
 
 .blob-2 {
     width: 420px; height: 420px;
-    background: var(--accent);
+    background: radial-gradient(circle, var(--accent) 0%, transparent 70%);
     bottom: -140px; right: -100px;
     animation: float-2 26s ease-in-out infinite;
 }
 
 .blob-3 {
     width: 320px; height: 320px;
-    background: var(--primary-2);
+    background: radial-gradient(circle, var(--primary-2) 0%, transparent 70%);
     top: 40%; left: 60%;
     animation: float-3 30s ease-in-out infinite;
     opacity: 0.22;
 }
 
-body.dark-mode .blob { opacity: 0.22; }
+html.dark-mode .blob { opacity: 0.22; }
 
 @keyframes float-1 {
     0%, 100% { transform: translate(0, 0) scale(1); }
@@ -203,7 +292,10 @@ header {
     justify-content: space-between;
     align-items: center;
     padding: 18px 28px;
+    max-height: 120px;
+    overflow: hidden;
     animation: slide-down var(--dur-slow) var(--ease-out) backwards;
+    transition: opacity var(--dur-med) var(--ease-out), max-height var(--dur-med) var(--ease-out), padding var(--dur-med) var(--ease-out);
 }
 
 @keyframes slide-down {
@@ -562,7 +654,8 @@ header {
 }
 
 .dropdown-menu button:hover,
-.dropdown-menu button:focus-visible {
+.dropdown-menu button:focus-visible,
+.dropdown-menu button.highlighted {
     background: color-mix(in srgb, var(--primary) 14%, var(--surface-alt));
     color: var(--primary);
     outline: none;
@@ -726,6 +819,20 @@ header {
 }
 
 /* ============ Find & Replace bar ============ */
+/* Painted via the CSS Custom Highlight API (see script.js) rather than the
+   native text Selection, specifically so marking a match never touches
+   focus - Selection ranges inside the editor would otherwise yank keyboard
+   focus out of the find box on every keystroke. */
+::highlight(find-match) {
+    background: color-mix(in srgb, var(--warning) 45%, transparent);
+}
+
+::highlight(find-current) {
+    background: var(--primary);
+    color: var(--primary-contrast, #fff);
+}
+
+
 .find-replace-bar {
     display: flex;
     align-items: center;
@@ -794,6 +901,19 @@ header {
 
 .fr-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-sm); }
 .fr-btn.primary { background: var(--gradient-brand); color: #fff; border-color: transparent; }
+.fr-btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+
+.fr-btn.icon-only { width: 36px; padding: 0; display: flex; align-items: center; justify-content: center; }
+.fr-btn.icon-only svg { width: 15px; height: 15px; }
+
+.fr-nav { display: flex; gap: 4px; flex-shrink: 0; }
+
+.fr-divider {
+    width: 1px;
+    height: 22px;
+    background: var(--border-strong);
+    flex-shrink: 0;
+}
 
 /* ============ Main layout ============ */
 main {
@@ -1202,11 +1322,17 @@ body.focus-mode #word-density {
     box-shadow: none;
 }
 
-/* The top bar is gone outright, not floated or shrunk — no space is ever
+/* The top bar is gone outright, not floated or shrunk - no space is ever
    reserved for it. Its icon cluster is physically relocated into the
    sidebar by moveHeaderIcons()/setFocusMode() in script.js, so the canvas
    gets the full top-to-bottom height the header used to occupy. */
-body.focus-mode header { display: none; }
+body.focus-mode header {
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    pointer-events: none;
+}
 
 body.focus-mode main {
     padding-top: 20px;
@@ -1215,7 +1341,7 @@ body.focus-mode main {
 /* Thin sidebar: the relocated icon cluster stacks above the same four
    stats, both far more compact than their normal-mode sizing. With the
    stat icons hidden, the cards only need to fit their text, so the whole
-   sidebar can be narrow — just enough for "Paragraphs" not to wrap. */
+   sidebar can be narrow - just enough for "Paragraphs" not to wrap. */
 body.focus-mode #analytics { width: 88px; padding: 4px 5px 4px 4px; gap: 8px; }
 body.focus-mode #stats-container { grid-template-columns: 1fr; gap: 6px; }
 
@@ -1986,7 +2112,7 @@ input[type="range"]::-moz-range-thumb {
 
 .filter-select-menu {
     min-width: 190px;
-    max-width: 260px;
+    max-width: min(260px, calc(100vw - 32px));
     padding: 6px;
 }
 
@@ -2209,6 +2335,77 @@ input[type="range"]::-moz-range-thumb {
 
 .doc-edit-actions .fr-btn { flex: 1; justify-content: center; }
 
+/* ============ Loading indicator ============ */
+.char-loader {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    font-family: var(--font-mono);
+    font-weight: 800;
+    letter-spacing: 0.02em;
+}
+
+.char-loader-cell {
+    display: inline-block;
+    min-width: 0.78em;
+    text-align: center;
+    animation: char-loader-bounce 900ms ease-in-out infinite;
+}
+
+@keyframes char-loader-bounce {
+    0%, 100% { transform: translateY(0); opacity: 0.5; }
+    50% { transform: translateY(-3px); opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .char-loader-cell { animation: none; opacity: 0.85; }
+}
+
+.char-loader-inline {
+    margin-left: 8px;
+    font-size: 0.76em;
+    color: var(--primary);
+}
+
+/* ============ Skeleton loading ============ */
+@keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.skeleton-bar {
+    display: block;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(90deg, var(--surface-alt) 25%, var(--border-strong) 50%, var(--surface-alt) 75%);
+    background-size: 240% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .skeleton-bar { animation: none; background: var(--surface-alt); }
+}
+
+.doc-skeleton {
+    display: flex;
+    align-items: center;
+    padding: 9px 10px 9px 12px;
+    border-radius: var(--radius-md);
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    animation: fade-up var(--dur-fast) var(--ease-out) backwards;
+}
+
+.doc-skeleton-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.doc-skeleton .skeleton-bar-title { height: 12px; width: 55%; }
+.doc-skeleton .skeleton-bar-meta { height: 9px; width: 32%; }
+
 /* ============ Toasts ============ */
 #toast-container {
     position: fixed;
@@ -2302,6 +2499,17 @@ input[type="range"]::-moz-range-thumb {
     .editor-card { flex: 1 1 50%; min-height: 0; }
     #analytics { width: 100%; height: auto; flex: 1 1 50%; min-height: 0; }
     .stats-secondary { grid-template-columns: 1fr 1fr; }
+
+    /* Focus mode's ultra-thin sidebar only makes sense next to a tall,
+       narrow editor column - once main stacks instead of sitting
+       side-by-side, force it back to a normal full-width strip (2-column
+       KPIs, the relocated icon cluster laid out horizontally) instead of
+       staying squeezed to its desktop 88px width. */
+    body.focus-mode #analytics { width: 100%; max-height: 42vh; }
+    body.focus-mode #stats-container { grid-template-columns: 1fr 1fr; }
+    body.focus-mode .header-icons { flex-direction: row; flex-wrap: wrap; }
+    body.focus-mode .header-icons .icon-btn,
+    body.focus-mode .header-icons .last-saved { width: auto; flex: 1 1 auto; }
 }
 
 @media (max-width: 640px) {
@@ -2321,5 +2529,12 @@ input[type="range"]::-moz-range-thumb {
     .limit-group { margin-left: 0; width: 100%; }
     #limit-dropdown { flex: 1; }
     #limit-dropdown-btn { width: 100%; justify-content: space-between; }
-    #settings-panel { width: 100%; max-width: 100%; }
+    #settings-panel, #documents-panel { width: 100%; max-width: 100%; }
+
+    /* The create/filter rows (Folder+Tags+Save, Search+Folder+Tags) were
+       sized for the panel's 440px desktop width - three fields across a
+       full-width mobile panel is too tight, so let them wrap instead of
+       squeezing. */
+    .field-row { flex-wrap: wrap; row-gap: 8px; }
+    .field-search { flex: 1 1 100%; }
 }

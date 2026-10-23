@@ -55,6 +55,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const findInput = document.getElementById('find-input');
     const replaceInput = document.getElementById('replace-input');
     const matchCountEl = document.getElementById('match-count');
+    const findPrevBtn = document.getElementById('find-prev-btn');
+    const findNextBtn = document.getElementById('find-next-btn');
     const replaceOneBtn = document.getElementById('replace-one-btn');
     const replaceAllBtn = document.getElementById('replace-all-btn');
 
@@ -138,6 +140,101 @@ document.addEventListener('DOMContentLoaded', () => {
         wordDensity: wordDensity
     };
 
+    /* ---------- loading indicator ----------
+       A scrambling-character loader instead of a spinner/progress bar -
+       fitting for a character counter, and it reads as "actively working"
+       rather than an indeterminate generic spin. Used only for genuinely
+       async, variable-latency work (Google Drive calls), each wrapped with
+       withLoader()/withButtonLoader() so fast operations (local IndexedDB,
+       etc.) never even flash it. */
+    const CHAR_LOADER_GLYPHS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+
+    function createCharLoader(cellCount = 3) {
+        const el = document.createElement('span');
+        el.className = 'char-loader';
+        el.setAttribute('aria-hidden', 'true');
+        const cells = [];
+        for (let i = 0; i < cellCount; i++) {
+            const cell = document.createElement('span');
+            cell.className = 'char-loader-cell';
+            cell.style.animationDelay = `${i * 110}ms`;
+            cell.textContent = CHAR_LOADER_GLYPHS[Math.floor(Math.random() * CHAR_LOADER_GLYPHS.length)];
+            el.appendChild(cell);
+            cells.push(cell);
+        }
+        const interval = setInterval(() => {
+            cells.forEach(cell => { cell.textContent = CHAR_LOADER_GLYPHS[Math.floor(Math.random() * CHAR_LOADER_GLYPHS.length)]; });
+        }, 90);
+        el._stop = () => clearInterval(interval);
+        return el;
+    }
+
+    // Swaps a button's content for the loader and back, tracking original
+    // content/disabled state on the element itself so nested or repeated
+    // calls can't leak intervals or clobber each other.
+    function setButtonLoading(btn, loading) {
+        const existingLoader = btn.querySelector('.char-loader');
+        if (existingLoader && existingLoader._stop) existingLoader._stop();
+        if (loading) {
+            if (btn.dataset.loading === '1') return;
+            btn.dataset.loading = '1';
+            btn.dataset.loaderHtml = btn.innerHTML;
+            btn.disabled = true;
+            btn.textContent = '';
+            btn.appendChild(createCharLoader());
+        } else {
+            if (btn.dataset.loading !== '1') return;
+            delete btn.dataset.loading;
+            btn.innerHTML = btn.dataset.loaderHtml || '';
+            delete btn.dataset.loaderHtml;
+            btn.disabled = false;
+        }
+    }
+
+    // Only shows the loader if the work is still running after `delay` (so
+    // fast local operations never flash it), and once shown keeps it up for
+    // at least `minVisible` so it never flickers on/off too fast to read.
+    async function withButtonLoader(btn, promise, { delay = 150, minVisible = 260 } = {}) {
+        let shown = false;
+        let shownAt = 0;
+        const timer = setTimeout(() => { setButtonLoading(btn, true); shown = true; shownAt = Date.now(); }, delay);
+        try {
+            return await promise;
+        } finally {
+            clearTimeout(timer);
+            if (shown) {
+                const wait = Math.max(0, minVisible - (Date.now() - shownAt));
+                if (wait) await new Promise(r => setTimeout(r, wait));
+                setButtonLoading(btn, false);
+            }
+        }
+    }
+
+    // Same delay/minVisible behavior as withButtonLoader, but appends the
+    // loader into any container instead of swapping a button's own content -
+    // for places (like a clicked document row) that aren't a single button.
+    async function withInlineLoader(containerEl, promise, { delay = 150, minVisible = 260 } = {}) {
+        let loader = null;
+        let shownAt = 0;
+        const timer = setTimeout(() => {
+            loader = createCharLoader(3);
+            loader.classList.add('char-loader-inline');
+            containerEl.appendChild(loader);
+            shownAt = Date.now();
+        }, delay);
+        try {
+            return await promise;
+        } finally {
+            clearTimeout(timer);
+            if (loader) {
+                const wait = Math.max(0, minVisible - (Date.now() - shownAt));
+                if (wait) await new Promise(r => setTimeout(r, wait));
+                loader._stop();
+                loader.remove();
+            }
+        }
+    }
+
     /* ---------- toasts ---------- */
     const TOAST_ICONS = {
         success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>',
@@ -185,7 +282,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Character offset of the cursor, measured as plain text from the very
-    // start of the editor — robust to the DOM being torn down and rebuilt
+    // start of the editor - robust to the DOM being torn down and rebuilt
     // (e.g. on reload) since it doesn't depend on specific node references.
     function getCursorOffset() {
         const selection = window.getSelection();
@@ -419,7 +516,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     lastSaved.addEventListener('click', () => {
         updateSaveIndicator();
-        openModal(saveStatusModal);
+        openModal(saveStatusModal, lastSaved);
     });
     saveStatusClose.addEventListener('click', closeActivePanel);
     saveStatusSaveNow.addEventListener('click', manualSave);
@@ -427,6 +524,18 @@ document.addEventListener('DOMContentLoaded', () => {
     /* ---------- core update ---------- */
     let currentLimit = Number(localStorage.getItem('charLimit')) || 0;
     let lastMetrics = {};
+
+    // The counts people watch live (char/word/sentence/paragraph, the limit
+    // ring) stay perfectly instant on every keystroke - they're cheap regex
+    // passes and the whole point of the app. Everything heavier (readability
+    // grading, unique-word/longest-word scanning, and especially the
+    // word-density list's frequency map + DOM rebuild) is debounced below,
+    // since none of it needs to recompute on literally every character typed
+    // in a long document. The autosave write is debounced the same way -
+    // writing the full HTML to localStorage synchronously on every keystroke
+    // is itself a cost worth avoiding once documents get long.
+    let expensiveAnalyticsTimer;
+    let autosaveWriteTimer;
 
     const updateCounts = () => {
         updateEmptyState();
@@ -449,6 +558,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         containers.secondary.classList.toggle('hidden', !checkboxes.secondary.checked);
 
+        updateLimitRing(text.length);
+        updateSaveIndicator();
+
+        clearTimeout(expensiveAnalyticsTimer);
+        expensiveAnalyticsTimer = setTimeout(() => updateExpensiveAnalytics(text, words, sentences, paragraphs), 180);
+
+        if (autosaveEnabled) {
+            clearTimeout(autosaveWriteTimer);
+            autosaveWriteTimer = setTimeout(() => {
+                localStorage.setItem('content', textInput.innerHTML);
+                lastSavedContent = textInput.innerHTML;
+                flashSaved();
+            }, 400);
+        }
+    };
+
+    function updateExpensiveAnalytics(text, words, sentences, paragraphs) {
         const noSpace = text.replace(/\s/g, '').length;
         const totalLetters = words.reduce((sum, w) => sum + w.length, 0);
         const avgLen = words.length ? (totalLetters / words.length) : 0;
@@ -484,15 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         renderWordDensity(words);
-        updateLimitRing(text.length);
-
-        if (autosaveEnabled) {
-            localStorage.setItem('content', textInput.innerHTML);
-            lastSavedContent = textInput.innerHTML;
-            flashSaved();
-        }
-        updateSaveIndicator();
-    };
+    }
 
     let savedFlashTimer;
     function flashSaved() {
@@ -572,33 +690,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /* ---------- undo / redo history ---------- */
-    let history = [textInput.innerHTML];
+    // Each entry also remembers where the cursor was at that point, so
+    // undo/redo land you back where you were instead of always snapping to
+    // the end of the content.
+    let history = [{ html: textInput.innerHTML, cursor: null }];
     let historyIndex = 0;
     let historyTimer;
 
     function snapshotHistory(value) {
-        if (history[historyIndex] === value) return;
+        if (history[historyIndex].html === value) return;
         history = history.slice(0, historyIndex + 1);
-        history.push(value);
+        history.push({ html: value, cursor: getCursorOffset() });
         historyIndex = history.length - 1;
         if (history.length > 100) { history.shift(); historyIndex--; }
         updateUndoRedoButtons();
     }
 
+    function restoreHistoryEntry() {
+        const entry = history[historyIndex];
+        textInput.innerHTML = entry.html;
+        updateCounts();
+        updateUndoRedoButtons();
+        if (entry.cursor !== null && setCursorOffset(entry.cursor)) {
+            textInput.focus();
+        }
+    }
+
     function undo() {
         if (historyIndex <= 0) return;
         historyIndex--;
-        textInput.innerHTML = history[historyIndex];
-        updateCounts();
-        updateUndoRedoButtons();
+        restoreHistoryEntry();
     }
 
     function redo() {
         if (historyIndex >= history.length - 1) return;
         historyIndex++;
-        textInput.innerHTML = history[historyIndex];
-        updateCounts();
-        updateUndoRedoButtons();
+        restoreHistoryEntry();
     }
 
     function updateUndoRedoButtons() {
@@ -753,8 +880,54 @@ document.addEventListener('DOMContentLoaded', () => {
             updateOptionStates();
         }
 
-        searchInput.addEventListener('input', () => renderOptions(searchInput.value));
-        searchInput.addEventListener('keydown', (e) => e.stopPropagation());
+        // Arrow keys move a keyboard highlight through the option list
+        // (reusing the same visual treatment as hover), Enter activates
+        // whichever option is highlighted, Home/End jump to the ends.
+        let highlightIndex = -1;
+
+        function highlightedItems() { return [...optionsWrap.children]; }
+
+        function setHighlight(index) {
+            const items = highlightedItems();
+            if (!items.length) { highlightIndex = -1; return; }
+            highlightIndex = Math.max(0, Math.min(index, items.length - 1));
+            items.forEach(el => el.classList.remove('highlighted'));
+            const el = items[highlightIndex];
+            el.classList.add('highlighted');
+            el.scrollIntoView({ block: 'nearest' });
+        }
+
+        searchInput.addEventListener('input', () => { highlightIndex = -1; renderOptions(searchInput.value); });
+        searchInput.addEventListener('keydown', (e) => {
+            e.stopPropagation();
+            if (e.key === 'ArrowDown') { e.preventDefault(); setHighlight(highlightIndex + 1); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); setHighlight(highlightIndex - 1); }
+            else if (e.key === 'Home') { e.preventDefault(); setHighlight(0); }
+            else if (e.key === 'End') { e.preventDefault(); setHighlight(highlightedItems().length - 1); }
+            else if (e.key === 'Enter') {
+                e.preventDefault();
+                const items = highlightedItems();
+                if (highlightIndex >= 0 && highlightIndex < items.length) items[highlightIndex].click();
+            } else if (e.key === 'Escape') {
+                closeDropdown(root);
+                trigger.focus();
+            }
+        });
+
+        // Opening the menu (the actual open/close toggle happens in the
+        // document-level .dropdown-trigger click handler above, which runs
+        // after this local listener since trigger is the event target) -
+        // defer to after that so this only resets state when it actually
+        // opened, not when the click just closed it.
+        trigger.addEventListener('click', () => {
+            setTimeout(() => {
+                if (!root.classList.contains('open')) return;
+                highlightIndex = -1;
+                searchInput.value = '';
+                renderOptions('');
+                searchInput.focus();
+            }, 0);
+        });
 
         updateLabel();
         renderOptions('');
@@ -1032,12 +1205,105 @@ document.addEventListener('DOMContentLoaded', () => {
         return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 
-    function updateMatchCount() {
-        const q = findInput.value;
-        if (!q) { matchCountEl.textContent = '0 matches'; return; }
-        const matches = getPlainText(textInput).match(new RegExp(escapeRegex(q), 'gi'));
-        const n = matches ? matches.length : 0;
-        matchCountEl.textContent = `${n} match${n === 1 ? '' : 'es'}`;
+    // Finding used to only ever be a side effect of replacing - typing a
+    // query just showed a count, with no way to actually jump between
+    // occurrences without typing a replacement and clicking Replace. These
+    // track every match as a {node, start, end} triple (via the same
+    // TreeWalker-over-text-nodes approach replace already used) so Enter/
+    // Shift+Enter or the arrow buttons can select and scroll to each one in
+    // turn, like a normal find bar.
+    let findMatches = [];
+    let findMatchIndex = -1;
+
+    // Marking the current match via window.getSelection() (the first version
+    // of this) put the Range inside the contenteditable editor, and browsers
+    // move DOM focus onto whatever element a Selection Range lives in - so
+    // every keystroke or Enter silently yanked focus out of the find box,
+    // which is also why forcing focus back afterward (the second version)
+    // made the highlight disappear again: an <input> having focus collapses
+    // document.getSelection() to empty, since form fields keep their own
+    // separate selection model. The CSS Custom Highlight API paints ranges
+    // without touching Selection or focus at all, which is exactly what's
+    // needed here. Falls back to the old Selection-based behavior on
+    // browsers old enough not to support it.
+    const supportsCustomHighlight = typeof Highlight === 'function' && 'highlights' in CSS;
+    const findAllHighlight = supportsCustomHighlight ? new Highlight() : null;
+    const findCurrentHighlight = supportsCustomHighlight ? new Highlight() : null;
+    if (supportsCustomHighlight) {
+        CSS.highlights.set('find-match', findAllHighlight);
+        CSS.highlights.set('find-current', findCurrentHighlight);
+    }
+
+    function clearFindHighlights() {
+        if (!supportsCustomHighlight) return;
+        findAllHighlight.clear();
+        findCurrentHighlight.clear();
+    }
+
+    function collectFindMatches(query) {
+        findMatches = [];
+        if (!query) return;
+        const re = new RegExp(escapeRegex(query), 'gi');
+        const walker = document.createTreeWalker(textInput, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+            let m;
+            re.lastIndex = 0;
+            while ((m = re.exec(node.nodeValue))) {
+                findMatches.push({ node, start: m.index, end: m.index + m[0].length });
+            }
+        }
+    }
+
+    function matchRange(match) {
+        const range = document.createRange();
+        range.setStart(match.node, match.start);
+        range.setEnd(match.node, match.end);
+        return range;
+    }
+
+    function selectCurrentMatch() {
+        const match = findMatches[findMatchIndex];
+        if (!match) return;
+        const range = matchRange(match);
+
+        if (supportsCustomHighlight) {
+            findAllHighlight.clear();
+            findMatches.forEach(m => findAllHighlight.add(matchRange(m)));
+            findCurrentHighlight.clear();
+            findCurrentHighlight.add(range);
+        } else {
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+        }
+
+        const rect = range.getBoundingClientRect();
+        const editorRect = textInput.getBoundingClientRect();
+        if (rect.top < editorRect.top || rect.bottom > editorRect.bottom) {
+            textInput.scrollTop += rect.top - editorRect.top - editorRect.height / 2 + rect.height / 2;
+        }
+    }
+
+    function refreshMatches() {
+        collectFindMatches(findInput.value);
+        findMatchIndex = findMatches.length ? 0 : -1;
+        renderMatchState();
+    }
+
+    function renderMatchState() {
+        matchCountEl.textContent = !findInput.value || !findMatches.length
+            ? '0 matches'
+            : `${findMatchIndex + 1} of ${findMatches.length}`;
+        findPrevBtn.disabled = findNextBtn.disabled = findMatches.length === 0;
+        if (findMatches.length) selectCurrentMatch();
+        else clearFindHighlights();
+    }
+
+    function goToMatch(direction) {
+        if (!findMatches.length) return;
+        findMatchIndex = (findMatchIndex + direction + findMatches.length) % findMatches.length;
+        renderMatchState();
     }
 
     // Replaces within each text node's own content, so surrounding formatting
@@ -1072,16 +1338,24 @@ document.addEventListener('DOMContentLoaded', () => {
         return total;
     }
 
-    findInput.addEventListener('input', updateMatchCount);
+    findInput.addEventListener('input', refreshMatches);
+    findInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        e.shiftKey ? goToMatch(-1) : goToMatch(1);
+    });
+    findPrevBtn.addEventListener('click', () => goToMatch(-1));
+    findNextBtn.addEventListener('click', () => goToMatch(1));
 
     function showFindReplace() {
         findReplaceBar.classList.remove('hidden');
         findInput.focus();
-        updateMatchCount();
+        refreshMatches();
     }
 
     function hideFindReplace() {
         findReplaceBar.classList.add('hidden');
+        clearFindHighlights();
     }
 
     findReplaceBtn.addEventListener('click', () => {
@@ -1095,7 +1369,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!replaceFirstInEditor(q, replaceInput.value)) { showToast('error', 'No matches found'); return; }
         updateCounts();
         snapshotHistory(textInput.innerHTML);
-        updateMatchCount();
+        refreshMatches();
         showToast('success', 'Replaced 1 occurrence');
     });
 
@@ -1106,7 +1380,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!count) { showToast('error', 'No matches found'); return; }
         updateCounts();
         snapshotHistory(textInput.innerHTML);
-        updateMatchCount();
+        refreshMatches();
         showToast('success', `Replaced ${count} occurrence${count === 1 ? '' : 's'}`);
     });
 
@@ -1491,14 +1765,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let themeMode = migrateThemeMode();
     let isDarkMode = false;
+    let themeTransitionTimer;
 
     function setTheme(mode) {
         themeMode = mode;
         isDarkMode = mode === 'auto' ? systemDarkQuery.matches : mode === 'dark';
-        document.body.classList.toggle('dark-mode', isDarkMode);
+        // Brief transition window so every surface eases to the new palette
+        // together, instead of some elements snapping instantly.
+        document.documentElement.classList.add('theme-transitioning');
+        clearTimeout(themeTransitionTimer);
+        themeTransitionTimer = setTimeout(() => document.documentElement.classList.remove('theme-transitioning'), 320);
+        document.documentElement.classList.toggle('dark-mode', isDarkMode);
         localStorage.setItem('themeMode', mode);
         darkModeToggle.dataset.mode = mode;
-        darkModeToggle.title = `Theme: ${mode[0].toUpperCase()}${mode.slice(1)} (click to change)`;
+        darkModeToggle.title = `Theme: ${mode[0].toUpperCase()}${mode.slice(1)} - Ctrl+Shift+G`;
         themePicker.querySelectorAll('.theme-option').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.theme === mode);
         });
@@ -1542,7 +1822,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Browsers only grant fullscreen from a call made synchronously inside a
-    // trusted user-gesture handler (click/keydown) — calling it from inside a
+    // trusted user-gesture handler (click/keydown) - calling it from inside a
     // setTimeout, as part of the animated transition below, gets silently
     // rejected because the gesture has already expired by then. So this
     // fires immediately, before any of the deferred relocate/resize work.
@@ -1606,12 +1886,23 @@ document.addEventListener('DOMContentLoaded', () => {
         activePanel = null;
     }
 
-    function openPanel(panel, delay) {
+    function openPanel(panel, delay, triggerEl) {
         closeAllPanelsInstantly();
         closeAllDropdowns();
         closeContextMenu();
         panel.classList.remove('hidden');
         scrim.classList.remove('hidden');
+        // Centered modals (not the side drawers, which slide) grow from
+        // wherever they were actually triggered instead of always from a
+        // fixed point, so it reads as "this came from that button" rather
+        // than just appearing in the middle of the screen.
+        if (triggerEl) {
+            const t = triggerEl.getBoundingClientRect();
+            const b = panel.getBoundingClientRect();
+            panel.style.transformOrigin = `${t.left + t.width / 2 - b.left}px ${t.top + t.height / 2 - b.top}px`;
+        } else {
+            panel.style.transformOrigin = '';
+        }
         requestAnimationFrame(() => {
             panel.classList.add('show');
             scrim.classList.add('show');
@@ -1634,7 +1925,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const openDrawer = (panel) => openPanel(panel, 420);
-    const openModal = (panel) => openPanel(panel, 260);
+    const openModal = (panel, triggerEl) => openPanel(panel, 260, triggerEl);
 
     settingsIcon.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -1669,23 +1960,38 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        if (!e.altKey && key === 'k') { e.preventDefault(); commandPalette.classList.contains('show') ? closeActivePanel() : openCommandPalette(); return; }
-        if (!e.altKey && key === 'f') { e.preventDefault(); findReplaceBar.classList.contains('hidden') ? showFindReplace() : hideFindReplace(); return; }
-        if (!e.altKey && key === 's') { e.preventDefault(); manualSave(); return; }
-        if (!e.altKey && key === ',') { e.preventDefault(); settingsPanel.classList.contains('show') ? closeActivePanel() : openDrawer(settingsPanel); return; }
-
-        if (e.altKey) {
+        // This group went through two wrong guesses before landing here:
+        // Ctrl+Alt+<key> broke on any non-US layout (Windows reads Ctrl+Alt
+        // as AltGr), and Alt+Shift+<key> broke too, intermittently, because
+        // Left Alt+Shift is Windows' own global "switch input language"
+        // hotkey - it doesn't just fail to reach the page, it can fire
+        // mid-combo and eat the keystroke entirely, which is why it looked
+        // like it "used to work" and then randomly stopped.
+        // Ctrl+Shift+<letter> avoids both of those, but Chrome itself
+        // reserves a long list of letters under that combo at the browser
+        // level (unoverridable by any page): T, N, W, O, J, M, V, B, D, C,
+        // I, R among them - confirmed firsthand by Ctrl+Shift+D opening
+        // Chrome's own bookmark dialog. The letters below were chosen to
+        // avoid that whole list; a few lose their mnemonic letter as a
+        // result (Documents->L, Theme->G, Copy->H, Import->K) but actually
+        // fire reliably, which matters more.
+        if (!e.altKey && e.shiftKey) {
             switch (key) {
-                case 'c': e.preventDefault(); copyBtn.click(); break;
-                case 'i': e.preventDefault(); uploadBtn.click(); break;
-                case 'e': e.preventDefault(); document.getElementById('export-dropdown-btn').click(); break;
-                case 'x': e.preventDefault(); clearBtn.click(); break;
-                case 'u': e.preventDefault(); document.getElementById('case-dropdown-btn').click(); break;
-                case 'd': e.preventDefault(); documentsBtn.click(); break;
-                case 'f': e.preventDefault(); focusModeToggle.click(); break;
-                case 't': e.preventDefault(); darkModeToggle.click(); break;
+                case 'h': e.preventDefault(); copyBtn.click(); return;
+                case 'k': e.preventDefault(); uploadBtn.click(); return;
+                case 'e': e.preventDefault(); document.getElementById('export-dropdown-btn').click(); return;
+                case 'x': e.preventDefault(); clearBtn.click(); return;
+                case 'u': e.preventDefault(); document.getElementById('case-dropdown-btn').click(); return;
+                case 'l': e.preventDefault(); documentsBtn.click(); return;
+                case 'f': e.preventDefault(); focusModeToggle.click(); return;
+                case 'g': e.preventDefault(); darkModeToggle.click(); return;
             }
         }
+
+        if (!e.altKey && !e.shiftKey && key === 'k') { e.preventDefault(); commandPalette.classList.contains('show') ? closeActivePanel() : openCommandPalette(); return; }
+        if (!e.altKey && !e.shiftKey && key === 'f') { e.preventDefault(); findReplaceBar.classList.contains('hidden') ? showFindReplace() : hideFindReplace(); return; }
+        if (!e.altKey && !e.shiftKey && key === 's') { e.preventDefault(); manualSave(); return; }
+        if (!e.altKey && !e.shiftKey && key === ',') { e.preventDefault(); settingsPanel.classList.contains('show') ? closeActivePanel() : openDrawer(settingsPanel); return; }
     });
 
     /* ---------- editor appearance ---------- */
@@ -2135,11 +2441,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (resp.error) { showToast('error', 'Google sign-in was cancelled or failed'); return; }
                     driveAccessToken = resp.access_token;
                     try {
-                        driveFolderId = await ensureDriveFolder(getDriveFolderPath());
-                        storageBackend = 'drive';
-                        localStorage.setItem('storageBackend', 'drive');
-                        updateDriveUI();
-                        renderDocuments();
+                        await withButtonLoader(connectDriveBtn, (async () => {
+                            driveFolderId = await ensureDriveFolder(getDriveFolderPath());
+                            storageBackend = 'drive';
+                            localStorage.setItem('storageBackend', 'drive');
+                            updateDriveUI();
+                            await renderDocuments();
+                        })());
                         showToast('success', 'Connected to Google Drive');
                         try { await loadSettingsFromDrive(); } catch { /* local settings stay in effect */ }
                     } catch {
@@ -2390,7 +2698,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         info.append(nameRow, metaRow);
 
-        info.addEventListener('click', () => loadDocument(doc.id));
+        info.addEventListener('click', () => loadDocument(doc.id, info));
 
         const actions = document.createElement('div');
         actions.className = 'doc-actions';
@@ -2431,8 +2739,37 @@ document.addEventListener('DOMContentLoaded', () => {
         filtered.forEach(doc => documentsList.appendChild(buildDocListItem(doc)));
     }
 
+    function showDocumentsSkeleton() {
+        documentsEmpty.classList.add('hidden');
+        documentsNoResults.classList.add('hidden');
+        documentsList.innerHTML = '';
+        for (let i = 0; i < 4; i++) {
+            const li = document.createElement('li');
+            li.className = 'doc-skeleton';
+            li.style.animationDelay = `${i * 40}ms`;
+            const info = document.createElement('div');
+            info.className = 'doc-skeleton-info';
+            const title = document.createElement('span');
+            title.className = 'skeleton-bar skeleton-bar-title';
+            const meta = document.createElement('span');
+            meta.className = 'skeleton-bar skeleton-bar-meta';
+            info.append(title, meta);
+            li.appendChild(info);
+            documentsList.appendChild(li);
+        }
+    }
+
     async function renderDocuments() {
-        documentsCache = (await DocStore.list()).sort((a, b) => b.updatedAt - a.updatedAt);
+        // Only Drive-backed lists have real network latency worth covering -
+        // local IndexedDB reads resolve well under the delay and never show it.
+        const skeletonTimer = setTimeout(showDocumentsSkeleton, 150);
+        let docs;
+        try {
+            docs = await DocStore.list();
+        } finally {
+            clearTimeout(skeletonTimer);
+        }
+        documentsCache = docs.sort((a, b) => b.updatedAt - a.updatedAt);
         documentsEmpty.classList.toggle('hidden', documentsCache.length !== 0);
         documentsCountBadge.textContent = documentsCache.length > 99 ? '99+' : documentsCache.length;
         documentsCountBadge.classList.toggle('hidden', documentsCache.length === 0);
@@ -2446,12 +2783,14 @@ document.addEventListener('DOMContentLoaded', () => {
         renderDocumentsList();
     });
 
-    async function loadDocument(id) {
+    async function loadDocument(id, triggerEl) {
         const meta = documentsCache.find(d => d.id === id);
         if (!meta) return;
         let content = meta.content;
         if (content === null || content === undefined) {
-            try { content = await driveGetContent(id); }
+            try {
+                content = triggerEl ? await withInlineLoader(triggerEl, driveGetContent(id)) : await driveGetContent(id);
+            }
             catch { showToast('error', 'Could not load this document from Drive'); return; }
         } else {
             content = plainTextToEditableHtml(content);
@@ -2517,10 +2856,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const tags = saveAsTagsInput.value.split(',').map(t => t.trim()).filter(Boolean).slice(0, 15);
 
         if (activeDocId) {
-            await DocStore.update(activeDocId, { name, content: textInput.innerHTML, folder, tags });
+            await withButtonLoader(saveAsBtn, DocStore.update(activeDocId, { name, content: textInput.innerHTML, folder, tags }));
             showToast('success', `Updated "${name}"`);
         } else {
-            const saved = await DocStore.save({ name, content: textInput.innerHTML, folder, tags, updatedAt: Date.now() });
+            const saved = await withButtonLoader(saveAsBtn, DocStore.save({ name, content: textInput.innerHTML, folder, tags, updatedAt: Date.now() }));
             setActiveDocId(saved.id);
             showToast('success', `Saved "${name}"`);
         }
@@ -2557,15 +2896,15 @@ document.addEventListener('DOMContentLoaded', () => {
         { label: 'Save now', shortcut: 'Ctrl+S', action: manualSave },
         { label: 'Save status & storage', action: () => lastSaved.click() },
         { label: 'Toggle autosave', action: () => autosaveToggle.click() },
-        { label: 'Cycle theme (light / dark / auto)', shortcut: 'Ctrl+Alt+T', action: () => darkModeToggle.click() },
-        { label: 'Toggle focus mode', shortcut: 'Ctrl+Alt+F', action: () => focusModeToggle.click() },
+        { label: 'Cycle theme (light / dark / auto)', shortcut: 'Ctrl+Shift+G', action: () => darkModeToggle.click() },
+        { label: 'Toggle focus mode', shortcut: 'Ctrl+Shift+F', action: () => focusModeToggle.click() },
         { label: 'Open settings', shortcut: 'Ctrl+,', action: () => openDrawer(settingsPanel) },
-        { label: 'Open documents', shortcut: 'Ctrl+Alt+D', action: () => { renderDocuments(); openDrawer(documentsPanel); } },
+        { label: 'Open documents', shortcut: 'Ctrl+Shift+L', action: () => { renderDocuments(); openDrawer(documentsPanel); } },
         { label: 'New blank document', action: () => newDocumentBtn.click() },
-        { label: 'Copy text to clipboard', shortcut: 'Ctrl+Alt+C', action: () => copyBtn.click() },
-        { label: 'Clear all text', shortcut: 'Ctrl+Alt+X', action: () => clearBtn.click() },
-        { label: 'Import a text file', shortcut: 'Ctrl+Alt+I', action: () => uploadBtn.click() },
-        { label: 'Open export menu', shortcut: 'Ctrl+Alt+E', action: () => document.getElementById('export-dropdown-btn').click() },
+        { label: 'Copy text to clipboard', shortcut: 'Ctrl+Shift+H', action: () => copyBtn.click() },
+        { label: 'Clear all text', shortcut: 'Ctrl+Shift+X', action: () => clearBtn.click() },
+        { label: 'Import a text file', shortcut: 'Ctrl+Shift+K', action: () => uploadBtn.click() },
+        { label: 'Open export menu', shortcut: 'Ctrl+Shift+E', action: () => document.getElementById('export-dropdown-btn').click() },
         { label: 'Download as .txt', action: () => handleExport('txt') },
         { label: 'Download as .md', action: () => handleExport('md') },
         { label: 'Download as .pdf', action: () => handleExport('pdf') },
@@ -2575,7 +2914,7 @@ document.addEventListener('DOMContentLoaded', () => {
         { label: 'Find & Replace', shortcut: 'Ctrl+F', action: showFindReplace },
         { label: 'Undo', shortcut: 'Ctrl+Z', action: undo },
         { label: 'Redo', shortcut: 'Ctrl+Shift+Z', action: redo },
-        { label: 'Open case menu', shortcut: 'Ctrl+Alt+U', action: () => document.getElementById('case-dropdown-btn').click() },
+        { label: 'Open case menu', shortcut: 'Ctrl+Shift+U', action: () => document.getElementById('case-dropdown-btn').click() },
         { label: 'Convert to UPPERCASE', action: () => applyCase('upper') },
         { label: 'Convert to lowercase', action: () => applyCase('lower') },
         { label: 'Convert to Title Case', action: () => applyCase('title') },
@@ -2709,7 +3048,7 @@ document.addEventListener('DOMContentLoaded', () => {
     updateDriveUI();
     migrateLegacyDocuments().then(renderDocuments).then(restoreActiveDocumentTitle);
 
-    history = [textInput.innerHTML];
+    history = [{ html: textInput.innerHTML, cursor: null }];
     historyIndex = 0;
     updateUndoRedoButtons();
     lastSavedContent = textInput.innerHTML;
