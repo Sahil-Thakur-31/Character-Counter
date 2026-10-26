@@ -40,7 +40,7 @@
             <div class="brand">
                 <span class="brand-badge">Aa</span>
                 <div class="brand-text">
-                    <h1>Character Counter<span class="brand-pro">Pro</span></h1>
+                    <h1>Character Counter</h1>
                     <p class="brand-sub">Live text analytics, zero friction</p>
                 </div>
             </div>
@@ -75,6 +75,30 @@
 
         <div class="toolbar" id="toolbar">
             <input type="text" id="document-title" class="doc-title-input" placeholder="Untitled document" maxlength="80" aria-label="Document title">
+
+            <div class="toolbar-group" id="toolbar-more-group">
+                <div class="dropdown" id="toolbar-more-dropdown">
+                    <button class="tool-btn icon-only dropdown-trigger" id="toolbar-more-btn" title="More actions" aria-label="More actions" aria-haspopup="true" aria-expanded="false">
+                        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+                    </button>
+                    <div class="dropdown-menu" id="toolbar-more-menu" role="menu">
+                        <button type="button" data-more="save" role="menuitem">Save</button>
+                        <button type="button" data-more="copy" role="menuitem">Copy text</button>
+                        <button type="button" data-more="import" role="menuitem">Import file</button>
+                        <div class="dropdown-divider"></div>
+                        <button type="button" data-more="export-txt" role="menuitem">Download as .txt</button>
+                        <button type="button" data-more="export-md" role="menuitem">Download as .md</button>
+                        <button type="button" data-more="export-pdf" role="menuitem">Download as .pdf</button>
+                        <button type="button" data-more="export-doc" role="menuitem">Download as .doc (Word)</button>
+                        <button type="button" data-more="export-report" role="menuitem">Copy stats report</button>
+                        <button type="button" data-more="export-share" role="menuitem">Copy shareable link</button>
+                        <div class="dropdown-divider"></div>
+                        <button type="button" data-more="clear" role="menuitem" class="danger-item">Clear all text</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="toolbar-icons-row">
             <div class="toolbar-icons">
             <div class="toolbar-group">
                 <button id="undo-btn" class="tool-btn icon-only" title="Undo (Ctrl+Z)" aria-label="Undo">
@@ -109,7 +133,7 @@
 
             <div class="toolbar-divider"></div>
 
-            <div class="toolbar-group">
+            <div class="toolbar-group" id="toolbar-overflow-group">
                 <button id="save-btn" class="tool-btn" title="Save (Ctrl+S)">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg>
                     <span class="tool-label">Save</span>
@@ -145,7 +169,6 @@
                 </button>
             </div>
 
-            <div class="toolbar-divider"></div>
             </div>
 
             <div class="toolbar-group limit-group">
@@ -173,6 +196,7 @@
                         </div>
                     </div>
                 </div>
+            </div>
             </div>
         </div>
 
@@ -342,6 +366,7 @@
     </div>
 
     <div id="stats-modal" class="hidden" role="dialog" aria-modal="true" aria-label="Stats and report">
+        <div class="stats-modal-handle" id="stats-modal-handle" aria-hidden="true"><span></span></div>
         <div class="settings-header">
             <h2>Stats &amp; Report</h2>
             <button id="stats-modal-close" class="icon-btn small" aria-label="Close">

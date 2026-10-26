@@ -94,6 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const statsModal = document.getElementById('stats-modal');
     const statsModalBody = document.getElementById('stats-modal-body');
     const statsModalClose = document.getElementById('stats-modal-close');
+    const statsModalHandle = document.getElementById('stats-modal-handle');
     const seeStatsBtn = document.getElementById('see-stats-btn');
     const analyticsAside = document.getElementById('analytics');
     const mainEl = document.querySelector('main');
@@ -1867,6 +1868,23 @@ document.addEventListener('DOMContentLoaded', () => {
         closeDropdown(exportDropdown);
     });
 
+    // "More" overflow menu (narrowest mobile width only) - forwards to the
+    // same real buttons/function rather than duplicating their logic, so
+    // there's exactly one place each action is actually implemented.
+    const toolbarMoreDropdown = document.getElementById('toolbar-more-dropdown');
+    const toolbarMoreMenu = document.getElementById('toolbar-more-menu');
+    toolbarMoreMenu.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-more]');
+        if (!btn) return;
+        const action = btn.dataset.more;
+        if (action === 'save') saveBtn.click();
+        else if (action === 'copy') copyBtn.click();
+        else if (action === 'import') uploadBtn.click();
+        else if (action === 'clear') clearBtn.click();
+        else if (action.startsWith('export-')) handleExport(action.slice('export-'.length));
+        closeDropdown(toolbarMoreDropdown);
+    });
+
     function selectLimitOption(btn) {
         limitDropdownMenu.querySelectorAll('button[data-limit-id]').forEach(b => b.classList.toggle('selected', b === btn));
         limitDropdownLabel.textContent = btn.textContent;
@@ -2183,6 +2201,46 @@ document.addEventListener('DOMContentLoaded', () => {
         statsModalBody.appendChild(analyticsAside);
     });
     statsModalClose.addEventListener('click', closeActivePanel);
+
+    // Drag-to-dismiss for the mobile bottom-sheet layout (see the 640px
+    // breakpoint). Only the handle is draggable, not the whole sheet, so
+    // scrolling the stats content itself still works normally. Inert on
+    // desktop/tablet since the handle is display:none there and never
+    // receives pointer events.
+    (function setupStatsModalDrag() {
+        let dragging = false;
+        let startY = 0;
+        let dragY = 0;
+
+        function onPointerMove(e) {
+            if (!dragging) return;
+            dragY = Math.max(0, e.clientY - startY);
+            statsModal.style.transform = `translateY(${dragY}px)`;
+        }
+
+        function onPointerUp() {
+            if (!dragging) return;
+            dragging = false;
+            statsModal.classList.remove('dragging');
+            const closeThreshold = Math.min(140, statsModal.getBoundingClientRect().height * 0.3);
+            const shouldClose = dragY > closeThreshold;
+            statsModal.style.transform = '';
+            if (shouldClose) closeActivePanel();
+            dragY = 0;
+        }
+
+        statsModalHandle.addEventListener('pointerdown', (e) => {
+            if (!statsModal.classList.contains('show')) return;
+            dragging = true;
+            startY = e.clientY;
+            dragY = 0;
+            statsModal.classList.add('dragging');
+            statsModalHandle.setPointerCapture(e.pointerId);
+        });
+        statsModalHandle.addEventListener('pointermove', onPointerMove);
+        statsModalHandle.addEventListener('pointerup', onPointerUp);
+        statsModalHandle.addEventListener('pointercancel', onPointerUp);
+    })();
 
     settingsIcon.addEventListener('click', (e) => {
         e.stopPropagation();

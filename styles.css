@@ -492,15 +492,24 @@ header {
     display: flex;
     align-items: center;
     gap: 3px;
+    flex-shrink: 0;
 }
+
+/* display:contents on desktop/tablet - the wrapper takes part in the
+   mobile-only row pairing with #toolbar-more-group (see the 640px
+   breakpoint) but otherwise shouldn't exist as a box: .toolbar-icons and
+   #toolbar-more-group stay direct flex items of .toolbar like before. */
+.toolbar-icons-row { display: contents; }
 
 .toolbar-icons {
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-shrink: 0;
 }
 
 .toolbar-divider {
+    flex-shrink: 0;
     width: 1px;
     height: 20px;
     background: var(--border-strong);
@@ -610,6 +619,17 @@ header {
     pointer-events: none;
 }
 
+.dropdown-menu button.danger-item { color: var(--danger); }
+.dropdown-menu button.danger-item:hover,
+.dropdown-menu button.danger-item:focus-visible {
+    background: color-mix(in srgb, var(--danger) 14%, var(--surface-alt));
+    color: var(--danger);
+}
+
+/* "More" overflow menu only exists for the narrowest mobile toolbar (see
+   the 640px breakpoint) - desktop and tablet show every action inline. */
+#toolbar-more-group { display: none; }
+
 .cm-shortcut {
     font-family: var(--font-mono);
     font-size: 0.76em;
@@ -652,7 +672,8 @@ header {
     .context-menu { animation: none; opacity: 1; }
 }
 
-#export-dropdown .dropdown-menu {
+#export-dropdown .dropdown-menu,
+#toolbar-more-dropdown .dropdown-menu {
     left: auto;
     right: 0;
     transform-origin: top right;
@@ -731,9 +752,22 @@ header {
 }
 
 .limit-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     font-size: 0.78em;
     color: var(--text-faint);
     font-weight: 600;
+}
+
+/* Tied to .limit-label itself (not a separate element) so it disappears
+   automatically wherever the label does - mobile already hides
+   .limit-label entirely, so this needs no separate mobile override. */
+.limit-label::before {
+    content: '';
+    width: 1px;
+    height: 14px;
+    background: var(--border-strong);
 }
 
 #limit-dropdown-label {
@@ -1695,6 +1729,11 @@ main {
     transform: translate(-50%, 0) scale(1);
     pointer-events: auto;
 }
+
+/* Only rendered as a bottom-sheet drag handle on mobile (see the 640px
+   breakpoint) - a centered dialog has nothing to grab/drag, so this stays
+   hidden there. */
+.stats-modal-handle { display: none; }
 
 /* Full width/space is available in the modal, so the compact mobile chip
    strips and the 360px desktop sidebar sizing both get reset back to a
@@ -2718,17 +2757,24 @@ input[type="range"]::-moz-range-thumb {
     .last-saved { padding: 0 9px; }
     #last-saved-label { display: none; }
     .toolbar { margin: 0 6px 4px; }
-    /* Content-based ("auto") flex-basis here would let the title and Goal
-       break onto separate lines before flex-shrink even gets a chance to
-       run - flex-wrap decides line breaks using each item's unshrunk
-       hypothetical size, and the Goal label's full (pre-ellipsis) text is
-       wide enough to force that. Percentage flex-basis sums to exactly
-       100% up front, which guarantees they share one line; giving Goal
-       more of that 100% is what actually fixes the wasted space. */
-    .doc-title-input { flex: 1 1 calc(65% - 3px); min-width: 0; order: -2; }
+    /* Title shares its row with the "More" button instead of Goal now.
+       This is safe with content-based ("auto") flex-basis - unlike Goal's
+       variable-length label, More's content is a single fixed-size icon
+       button, so its hypothetical width is always small and bounded and
+       never forces an unwanted line break the way Goal's text could. */
+    .doc-title-input { flex: 1 1 auto; min-width: 0; order: -3; }
     .tool-label { display: none; }
+    /* The scrollable icon strip and the pinned "More" button need to share
+       one row, with More fixed at the end and never scrolled away - this
+       wrapper is what gets the full-width row (not .toolbar-icons itself),
+       so More can sit outside the scrolling part as a flex-shrink:0 sibling. */
+    .toolbar-icons-row { flex-basis: 100%; display: flex; align-items: center; gap: 6px; min-width: 0; }
     .toolbar-icons {
-        flex-basis: 100%;
+        /* flex-grow:0 - its buttons are fixed-size and don't stretch, so
+           growing this just wasted the extra space invisibly (nothing in
+           here fills it). Goal is what should absorb the leftover room. */
+        flex: 0 1 auto;
+        min-width: 0;
         flex-wrap: nowrap;
         overflow-x: auto;
         scrollbar-width: none;
@@ -2737,28 +2783,103 @@ input[type="range"]::-moz-range-thumb {
     .toolbar-icons::-webkit-scrollbar { display: none; }
     .toolbar-icons .toolbar-group,
     .toolbar-icons .toolbar-divider { flex-shrink: 0; }
+
+    /* Save/Copy/Import/Export/Clear collapse into the "More" (⋯) menu here
+       instead of relying on users noticing the row scrolls - a visible,
+       pinned trigger is more discoverable than a swipeable overflow. It
+       now sits beside the title (row 1) rather than at the end of the
+       icon row. */
+    #toolbar-overflow-group { display: none; }
+    #toolbar-more-group { display: flex; flex-shrink: 0; order: -2; }
+    #toolbar-more-menu { max-width: calc(100vw - 32px); }
+
     .find-replace-bar { margin: 0 16px 14px; }
     main { padding: 0 6px 6px; gap: 14px; }
     #text-input { padding: 18px; font-size: 16px !important; }
 
-    .limit-group { margin-left: 0; flex: 1 1 calc(35% - 3px); min-width: 0; order: -1; }
+    /* Goal now shares the icon row itself (title+More is row 1, icons+Goal
+       is row 2) instead of getting its own line - it's a sibling of
+       .toolbar-icons inside .toolbar-icons-row (same row-sharing idea as
+       #toolbar-more-group, but Goal grows instead of staying pinned at a
+       fixed size: icons are fixed-width/content-sized, so Goal is what
+       absorbs whatever room is left, giving it a stable width that
+       depends on the icons' constant width rather than fluctuating with
+       its own label's length). min-width is just a floor so it never
+       shrinks below a usable size, and - per explicit instruction - it
+       never wraps to a new row; .toolbar-icons-row's default (nowrap)
+       flex-wrap is what enforces that. Explicit `flex` shorthand and
+       `order` because the 980px breakpoint is simultaneously active down
+       here (640 < 980) and its own .limit-group rule set a percentage
+       flex-basis and order:-1 that would otherwise leak through on every
+       sub-property this rule doesn't also touch. */
+    .limit-group { margin-left: 0; width: auto; min-width: 110px; flex: 1 1 auto; order: 0; }
     .limit-label { display: none; }
     #limit-dropdown { flex: 1; min-width: 0; }
     #limit-dropdown-btn { width: 100%; min-width: 0; justify-content: space-between; }
-    .limit-menu { max-width: calc(100vw - 32px); }
+    /* Goal's trigger now sits at the right end of the icon row - anchor
+       the menu to its right edge, like .limit-menu already does on
+       desktop/tablet, so it doesn't open past the left edge of the screen. */
+    .limit-menu { left: auto; right: 0; max-width: calc(100vw - 32px); }
     .limit-menu button { white-space: normal; }
     #settings-panel, #documents-panel { width: 100%; max-width: 100%; }
+
+    /* Bottom sheet instead of a centered dialog - anchored to the bottom
+       edge and sliding up from off-screen, which feels native on a phone
+       and avoids the floating-in-the-middle look a centered dialog has at
+       this size. JS (see stats-modal drag handling) sets an inline
+       transform while dragging; this transition only governs the
+       snap-back/open/close animation, not the drag itself. */
+    #stats-modal {
+        top: auto;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: 100%;
+        max-height: 85vh;
+        border-radius: 20px 20px 0 0;
+        border-bottom: none;
+        transform: translateY(100%);
+        transition: transform var(--dur-med) var(--ease-spring), opacity var(--dur-med) var(--ease-out);
+    }
+    #stats-modal.show { transform: translateY(0); }
+    #stats-modal.dragging { transition: none; }
+
+    .stats-modal-handle {
+        display: flex;
+        justify-content: center;
+        padding: 10px 0 2px;
+        flex-shrink: 0;
+        touch-action: none;
+        cursor: grab;
+    }
+    .stats-modal-handle span {
+        width: 40px;
+        height: 4px;
+        border-radius: 999px;
+        background: var(--border-strong);
+    }
 
     /* The stats modal's fixed 460px/92vw sizing and desktop-scale padding
        leave a visible unused gutter on a narrow phone - use nearly the
        full viewport and tighten the interior spacing to match. */
-    #stats-modal { width: 98vw; max-width: 98vw; }
     #stats-modal-body { padding: 10px 10px 22px; }
     #stats-modal-body #stats-container { gap: 6px; }
     #stats-modal-body .stat-card { padding: 10px; gap: 8px; }
     #stats-modal-body .stat-icon { width: 32px; height: 32px; }
     #stats-modal-body .stats-secondary { padding: 8px; gap: 2px; }
     #stats-modal-body .mini-stat { padding: 5px 6px; }
+
+    /* Word Density still had desktop-scale header/row padding and gaps -
+       same tightening pass as the stat cards above. */
+    #stats-modal-body .word-density-header { padding: 10px 12px; }
+    #stats-modal-body .word-density-header h3 { font-size: 0.88em; }
+    #stats-modal-body #word-list-container { padding: 6px 8px; }
+    #stats-modal-body #word-list { gap: 2px; }
+    #stats-modal-body #word-list li { grid-template-columns: 18px 1fr auto; gap: 8px; padding: 5px 2px; }
+    #stats-modal-body .word-info { gap: 3px; }
+    #stats-modal-body .word-name { font-size: 0.8em; }
+    #stats-modal-body .word-count { font-size: 0.72em; }
+    #stats-modal-body .word-bar-track { height: 4px; }
 
     /* The create/filter rows (Folder+Tags+Save, Search+Folder+Tags) were
        sized for the panel's 440px desktop width - three fields across a
@@ -2781,4 +2902,5 @@ input[type="range"]::-moz-range-thumb {
     .header-icons .icon-btn svg { width: 16px; height: 16px; }
     .last-saved { padding: 0 8px; height: 34px; }
     .last-saved svg { width: 12px; height: 12px; }
+    .settings-header {padding: 6px 14px}
 }
