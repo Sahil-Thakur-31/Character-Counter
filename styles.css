@@ -456,15 +456,14 @@ header {
 .toolbar {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin: 0 28px 16px;
-    padding: 8px 10px;
+    margin: 0 15px 6px;
+    padding: 6px 4px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-sm);
     flex-wrap: wrap;
-    max-height: 160px;
+    max-height: 400px;
     animation: slide-down var(--dur-slow) var(--ease-out) 60ms backwards;
     transition: background var(--dur-med), border-color var(--dur-med), max-height var(--dur-med) var(--ease-out), opacity var(--dur-med), margin var(--dur-med), padding var(--dur-med);
 }
@@ -492,14 +491,20 @@ header {
 .toolbar-group {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 3px;
+}
+
+.toolbar-icons {
+    display: flex;
+    align-items: center;
+    gap: 10px;
 }
 
 .toolbar-divider {
     width: 1px;
-    height: 22px;
+    height: 20px;
     background: var(--border-strong);
-    margin: 0 2px;
+    margin: 0 1px;
 }
 
 .tool-btn {
@@ -507,9 +512,9 @@ header {
     overflow: hidden;
     display: inline-flex;
     align-items: center;
-    gap: 7px;
-    height: 36px;
-    padding: 0 12px;
+    gap: 2px;
+    height: 26px;
+    padding: 0 4px;
     border-radius: var(--radius-sm);
     border: 1px solid transparent;
     background: transparent;
@@ -537,7 +542,7 @@ header {
 
 .tool-btn:active { transform: translateY(0) scale(0.97); }
 
-.tool-btn.icon-only { padding: 0; width: 36px; justify-content: center; }
+.tool-btn.icon-only { padding: 0; width: 32px; justify-content: center; }
 
 .tool-btn.danger:hover {
     background: color-mix(in srgb, var(--danger) 12%, transparent);
@@ -722,12 +727,20 @@ header {
 .limit-group {
     margin-left: auto;
     gap: 8px;
+    min-width: 0;
 }
 
 .limit-label {
     font-size: 0.78em;
     color: var(--text-faint);
     font-weight: 600;
+}
+
+#limit-dropdown-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .limit-menu {
@@ -1041,6 +1054,11 @@ main {
 .last-saved.unsaved { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
 .last-saved.unsaved svg { color: var(--warning); }
 .last-saved.unsaved:hover { color: var(--warning); border-color: var(--warning); }
+
+/* Desktop already shows the stats sidebar inline - this nav button only
+   makes sense once that sidebar is hidden on mobile (see the 640px
+   breakpoint), where it opens #stats-modal instead. */
+#see-stats-btn { display: none; }
 
 .limit-ring-wrap {
     position: absolute;
@@ -1433,6 +1451,85 @@ main {
 
 .overlay.show { opacity: 1; }
 
+/* ============ Confirm modal ============ */
+/* Replaces window.confirm() (the bare native browser dialog, unstyled and
+   impossible to theme) for the app's own destructive-action confirmations -
+   deleting a document, discarding unsaved text, overwriting a Drive
+   document someone else changed. */
+.confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(10, 10, 20, 0.45);
+    backdrop-filter: blur(3px);
+    opacity: 0;
+    transition: opacity var(--dur-med) var(--ease-out);
+}
+
+.confirm-overlay.show { opacity: 1; }
+
+.confirm-modal {
+    width: 380px;
+    max-width: 100%;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 22px;
+    opacity: 0;
+    transform: scale(0.95) translateY(6px);
+    transition: opacity var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-spring);
+}
+
+.confirm-overlay.show .confirm-modal {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
+
+#confirm-modal-title {
+    margin: 0 0 8px;
+    font-size: 1.05em;
+    font-weight: 800;
+    color: var(--text);
+}
+
+#confirm-modal-message {
+    margin: 0 0 20px;
+    font-size: 0.88em;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+.confirm-modal-input {
+    display: block;
+    width: 100%;
+    height: 38px;
+    padding: 0 12px;
+    margin: 0 0 20px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-alt);
+    color: var(--text);
+    font-size: 0.88em;
+    outline: none;
+    transition: border-color var(--dur-fast);
+}
+
+.confirm-modal-input:focus { border-color: var(--primary); }
+
+.confirm-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+.confirm-modal-actions .fr-btn { height: 38px; padding: 0 18px; }
+#confirm-modal-ok.danger { background: var(--danger); color: #fff; border-color: transparent; }
+
 #settings-panel, #documents-panel {
     position: fixed;
     top: 0;
@@ -1567,6 +1664,87 @@ main {
 }
 
 #save-status-save-now { width: 100%; }
+
+/* ============ Stats modal (mobile "See stats" button) ============ */
+/* On mobile the #analytics sidebar is hidden from the normal layout so the
+   editor gets the full screen; #see-stats-btn moves the real #analytics
+   node (not a clone) into this modal's body so every id-based JS hook
+   keeps working unchanged, then moves it back to <main> on close. */
+#stats-modal {
+    position: fixed;
+    top: 8vh;
+    left: 50%;
+    width: 460px;
+    max-width: 92vw;
+    max-height: 84vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 110;
+    opacity: 0;
+    transform: translate(-50%, -10px) scale(0.97);
+    transition: opacity var(--dur-med) var(--ease-out), transform var(--dur-med) var(--ease-spring);
+    pointer-events: none;
+}
+
+#stats-modal.show {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+    pointer-events: auto;
+}
+
+/* Full width/space is available in the modal, so the compact mobile chip
+   strips and the 360px desktop sidebar sizing both get reset back to a
+   roomy 2-column grid - the two-ID selectors here outrank the single-ID
+   mobile-breakpoint rules regardless of source order. */
+#stats-modal-body #analytics {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+    padding: 0;
+    gap: 16px;
+}
+
+#stats-modal-body #stats-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex-wrap: wrap;
+    overflow: visible;
+}
+
+#stats-modal-body .stat-card { min-width: 0; padding: 14px; }
+#stats-modal-body .stat-icon { width: 36px; height: 36px; }
+#stats-modal-body .stat-icon svg { width: 18px; height: 18px; }
+#stats-modal-body .stat-value { font-size: 1.35em; }
+#stats-modal-body .stat-label { font-size: 0.78em; white-space: normal; }
+
+#stats-modal-body .stats-secondary {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    flex-wrap: wrap;
+    overflow: visible;
+}
+
+#stats-modal-body .mini-stat { min-width: 0; padding: 8px 10px; }
+#stats-modal-body .mini-stat.wide { grid-column: 1 / -1; }
+
+/* Tablet widths have more screen to spend than mobile - widen the modal
+   itself and let all 4 primary cards sit in a single row, with the 7
+   secondary stats packed into 2 rows of 4 instead of 4 rows of 2. */
+@media (min-width: 641px) and (max-width: 980px) {
+    #stats-modal { width: 94vw; max-width: 960px; }
+    #stats-modal-body { padding: 16px 16px 30px; }
+    #stats-modal-body #stats-container { grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    #stats-modal-body .stats-secondary { grid-template-columns: repeat(4, 1fr); }
+    #stats-modal-body .mini-stat.wide { grid-column: span 2; }
+    #stats-modal-body .stat-card { padding: 14px; gap: 10px; }
+}
 
 .save-status-drive h4 { margin-bottom: 8px; }
 .save-status-drive .settings-hint { margin-bottom: 12px; }
@@ -2454,6 +2632,7 @@ input[type="range"]::-moz-range-thumb {
 .toast.error .toast-icon { background: var(--danger); }
 .toast.info .toast-icon { background: var(--primary); }
 .toast.delete .toast-icon { background: var(--text-muted); }
+.toast.warning .toast-icon { background: var(--warning); }
 
 @keyframes toast-in {
     from { opacity: 0; transform: translateX(40px) scale(0.95); }
@@ -2498,7 +2677,28 @@ input[type="range"]::-moz-range-thumb {
     main { flex-direction: column; }
     .editor-card { flex: 1 1 50%; min-height: 0; }
     #analytics { width: 100%; height: auto; flex: 1 1 50%; min-height: 0; }
-    .stats-secondary { grid-template-columns: 1fr 1fr; }
+
+    /* Stats move into the same on-demand modal as mobile at every stacked
+       (tablet-and-down) width - full page for content, surfaced via the
+       "Stats" eye icon in the header - except in focus mode, which keeps
+       its own condensed strip alongside the editor instead. */
+    body:not(.focus-mode) #analytics { display: none; }
+    body:not(.focus-mode) #see-stats-btn { display: grid; }
+
+    /* Goal sits in the title row here too (like mobile), just with more
+       room to spend: 60/40 instead of mobile's 70/30. The icon buttons
+       still have their full text labels at this width (the 640px
+       breakpoint is what hides them), so they don't fit alongside title +
+       Goal - force them onto their own row below instead of letting them
+       wrap in between and push Goal to a third row. */
+    .doc-title-input { flex: 1 1 calc(60% - 3px); min-width: 0; height: 40px; order: -2; }
+    .toolbar-icons { flex-basis: 100%; }
+    .tool-btn { height: 40px; }
+    .limit-group { margin-left: 0; flex: 1 1 calc(40% - 3px); order: -1; }
+    #limit-dropdown { flex: 1; min-width: 0; }
+    #limit-dropdown-btn { width: 100%; min-width: 0; justify-content: space-between; }
+    .limit-menu { max-width: calc(100vw - 32px); }
+    .limit-menu button { white-space: normal; }
 
     /* Focus mode's ultra-thin sidebar only makes sense next to a tall,
        narrow editor column - once main stacks instead of sitting
@@ -2513,23 +2713,52 @@ input[type="range"]::-moz-range-thumb {
 }
 
 @media (max-width: 640px) {
-    header { padding: 14px 16px; }
+    header { padding: 6px 10px; }
     .brand-sub { display: none; }
     .last-saved { padding: 0 9px; }
     #last-saved-label { display: none; }
-    .toolbar { margin: 0 16px 14px; }
-    .doc-title-input { flex-basis: 100%; order: -1; }
+    .toolbar { margin: 0 6px 4px; }
+    /* Content-based ("auto") flex-basis here would let the title and Goal
+       break onto separate lines before flex-shrink even gets a chance to
+       run - flex-wrap decides line breaks using each item's unshrunk
+       hypothetical size, and the Goal label's full (pre-ellipsis) text is
+       wide enough to force that. Percentage flex-basis sums to exactly
+       100% up front, which guarantees they share one line; giving Goal
+       more of that 100% is what actually fixes the wasted space. */
+    .doc-title-input { flex: 1 1 calc(65% - 3px); min-width: 0; order: -2; }
     .tool-label { display: none; }
-    .tool-btn { padding: 0 9px; }
+    .toolbar-icons {
+        flex-basis: 100%;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+    }
+    .toolbar-icons::-webkit-scrollbar { display: none; }
+    .toolbar-icons .toolbar-group,
+    .toolbar-icons .toolbar-divider { flex-shrink: 0; }
     .find-replace-bar { margin: 0 16px 14px; }
-    main { padding: 0 16px 16px; gap: 14px; }
+    main { padding: 0 6px 6px; gap: 14px; }
     #text-input { padding: 18px; font-size: 16px !important; }
-    #stats-container { grid-template-columns: 1fr 1fr; }
-    .stat-value { font-size: 1.15em; }
-    .limit-group { margin-left: 0; width: 100%; }
-    #limit-dropdown { flex: 1; }
-    #limit-dropdown-btn { width: 100%; justify-content: space-between; }
+
+    .limit-group { margin-left: 0; flex: 1 1 calc(35% - 3px); min-width: 0; order: -1; }
+    .limit-label { display: none; }
+    #limit-dropdown { flex: 1; min-width: 0; }
+    #limit-dropdown-btn { width: 100%; min-width: 0; justify-content: space-between; }
+    .limit-menu { max-width: calc(100vw - 32px); }
+    .limit-menu button { white-space: normal; }
     #settings-panel, #documents-panel { width: 100%; max-width: 100%; }
+
+    /* The stats modal's fixed 460px/92vw sizing and desktop-scale padding
+       leave a visible unused gutter on a narrow phone - use nearly the
+       full viewport and tighten the interior spacing to match. */
+    #stats-modal { width: 98vw; max-width: 98vw; }
+    #stats-modal-body { padding: 10px 10px 22px; }
+    #stats-modal-body #stats-container { gap: 6px; }
+    #stats-modal-body .stat-card { padding: 10px; gap: 8px; }
+    #stats-modal-body .stat-icon { width: 32px; height: 32px; }
+    #stats-modal-body .stats-secondary { padding: 8px; gap: 2px; }
+    #stats-modal-body .mini-stat { padding: 5px 6px; }
 
     /* The create/filter rows (Folder+Tags+Save, Search+Folder+Tags) were
        sized for the panel's 440px desktop width - three fields across a
@@ -2537,4 +2766,19 @@ input[type="range"]::-moz-range-thumb {
        squeezing. */
     .field-row { flex-wrap: wrap; row-gap: 8px; }
     .field-search { flex: 1 1 100%; }
+}
+
+/* Phone widths specifically: confirmed via direct measurement that the
+   brand text plus a full row of 5 header icon buttons renders ~100px past
+   the viewport's right edge below ~480px (clipped, not wrapped, since the
+   header has no wrap/scroll of its own) - this isn't a "could be tighter"
+   issue, it's actual content cut off and unreachable. */
+@media (max-width: 500px) {
+    .brand-text { display: none; }
+
+    .header-icons { gap: 4px; }
+    .header-icons .icon-btn { width: 34px; height: 34px; }
+    .header-icons .icon-btn svg { width: 16px; height: 16px; }
+    .last-saved { padding: 0 8px; height: 34px; }
+    .last-saved svg { width: 12px; height: 12px; }
 }

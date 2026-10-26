@@ -90,6 +90,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const saveStatusTitle = document.getElementById('save-status-title');
     const saveStatusDesc = document.getElementById('save-status-desc');
     const saveStatusSaveNow = document.getElementById('save-status-save-now');
+
+    const statsModal = document.getElementById('stats-modal');
+    const statsModalBody = document.getElementById('stats-modal-body');
+    const statsModalClose = document.getElementById('stats-modal-close');
+    const seeStatsBtn = document.getElementById('see-stats-btn');
+    const analyticsAside = document.getElementById('analytics');
+    const mainEl = document.querySelector('main');
     const driveStatusText = document.getElementById('drive-status-text');
     const connectDriveBtn = document.getElementById('connect-drive-btn');
     const disconnectDriveBtn = document.getElementById('disconnect-drive-btn');
@@ -235,12 +242,82 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    /* ---------- confirm / prompt modal ---------- */
+    // Replaces window.confirm()/window.prompt() - bare, unthemeable native
+    // browser dialogs - for every destructive-action or text-input prompt
+    // in the app. One shared modal element, toggled between a plain
+    // confirm (resolves true/false) and a prompt with a text field
+    // (resolves the entered string, or null if cancelled).
+    const confirmOverlay = document.getElementById('confirm-overlay');
+    const confirmModalTitle = document.getElementById('confirm-modal-title');
+    const confirmModalMessage = document.getElementById('confirm-modal-message');
+    const confirmModalInput = document.getElementById('confirm-modal-input');
+    const confirmModalCancel = document.getElementById('confirm-modal-cancel');
+    const confirmModalOk = document.getElementById('confirm-modal-ok');
+
+    function openConfirmModal({ title, message = '', okLabel = 'OK', danger = false, showInput = false, inputValue = '', inputPlaceholder = '' }) {
+        return new Promise((resolve) => {
+            confirmModalTitle.textContent = title;
+            confirmModalMessage.textContent = message;
+            confirmModalMessage.classList.toggle('hidden', !message);
+            confirmModalOk.textContent = okLabel;
+            confirmModalOk.classList.toggle('danger', danger);
+            confirmModalInput.classList.toggle('hidden', !showInput);
+            if (showInput) {
+                confirmModalInput.value = inputValue;
+                confirmModalInput.placeholder = inputPlaceholder;
+            }
+
+            confirmOverlay.classList.remove('hidden');
+            requestAnimationFrame(() => confirmOverlay.classList.add('show'));
+
+            const previouslyFocused = document.activeElement;
+            if (showInput) { confirmModalInput.focus(); confirmModalInput.select(); }
+            else confirmModalOk.focus();
+
+            function cleanup(result) {
+                confirmOverlay.classList.remove('show');
+                setTimeout(() => confirmOverlay.classList.add('hidden'), 220);
+                document.removeEventListener('keydown', onKeydown, true);
+                confirmModalOk.removeEventListener('click', onOk);
+                confirmModalCancel.removeEventListener('click', onCancel);
+                confirmOverlay.removeEventListener('click', onOverlayClick);
+                if (previouslyFocused && previouslyFocused.focus) previouslyFocused.focus();
+                resolve(result);
+            }
+            function onOk() { cleanup(showInput ? confirmModalInput.value : true); }
+            function onCancel() { cleanup(showInput ? null : false); }
+            function onOverlayClick(e) { if (e.target === confirmOverlay) onCancel(); }
+            function onKeydown(e) {
+                if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); onCancel(); }
+                else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); onOk(); }
+            }
+
+            confirmModalOk.addEventListener('click', onOk);
+            confirmModalCancel.addEventListener('click', onCancel);
+            confirmOverlay.addEventListener('click', onOverlayClick);
+            // Capture phase so this wins over the app's own global Escape
+            // handler (which would otherwise also try to close whatever
+            // panel is open behind this modal in the same keystroke).
+            document.addEventListener('keydown', onKeydown, true);
+        });
+    }
+
+    function customConfirm(message, { title = 'Are you sure?', okLabel = 'OK', danger = false } = {}) {
+        return openConfirmModal({ title, message, okLabel, danger, showInput: false });
+    }
+
+    function customPrompt(title, { message = '', okLabel = 'OK', defaultValue = '', placeholder = '' } = {}) {
+        return openConfirmModal({ title, message, okLabel, showInput: true, inputValue: defaultValue, inputPlaceholder: placeholder });
+    }
+
     /* ---------- toasts ---------- */
     const TOAST_ICONS = {
         success: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6 9 17l-5-5"/></svg>',
         error: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 6l12 12M18 6 6 18"/></svg>',
         info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 8v.01M12 11v5"/></svg>',
-        delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>'
+        delete: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/></svg>',
+        warning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 9v4M12 16.5v.01M10.3 3.9 2.6 17a1.8 1.8 0 0 0 1.5 2.7h15.8a1.8 1.8 0 0 0 1.5-2.7L13.7 3.9a1.8 1.8 0 0 0-3.4 0Z"/></svg>'
     };
 
     function showToast(type, message, duration = 2800) {
@@ -627,18 +704,36 @@ document.addEventListener('DOMContentLoaded', () => {
         wordDensity.classList.remove('hidden');
 
         const freq = {};
+        let uniqueCount = 0;
         words.forEach(w => {
             const lw = w.toLowerCase();
+            if (freq[lw] === undefined) uniqueCount++;
             freq[lw] = (freq[lw] || 0) + 1;
         });
-        const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-        uniqueWordBadge.textContent = `${sorted.length} unique`;
+        uniqueWordBadge.textContent = `${uniqueCount} unique`;
 
         wordList.innerHTML = '';
-        wordDensityEmpty.classList.toggle('hidden', sorted.length !== 0);
-        if (sorted.length === 0) return;
+        wordDensityEmpty.classList.toggle('hidden', uniqueCount !== 0);
+        if (uniqueCount === 0) return;
 
-        const top = sorted.slice(0, 12);
+        // Only the top 12 are ever shown, so keep a bounded array sized to
+        // that instead of sorting every unique word in the document - on a
+        // large vocabulary this is O(n) instead of O(n log n), and the
+        // rebuild-on-every-edit cost was flagged as the next thing likely to
+        // bottleneck once documents get large.
+        const TOP_N = 12;
+        const top = [];
+        for (const word in freq) {
+            const count = freq[word];
+            if (top.length < TOP_N) {
+                top.push([word, count]);
+                if (top.length === TOP_N) top.sort((a, b) => a[1] - b[1]);
+            } else if (count > top[0][1]) {
+                top[0] = [word, count];
+                top.sort((a, b) => a[1] - b[1]);
+            }
+        }
+        top.sort((a, b) => b[1] - a[1]);
         const maxFreq = top[0][1];
         const totalWords = words.length;
         top.forEach(([word, count], i) => {
@@ -1061,13 +1156,23 @@ document.addEventListener('DOMContentLoaded', () => {
         snapshotHistory(textInput.innerHTML);
     }
 
-    function insertLink() {
-        if (window.getSelection().isCollapsed) {
+    async function insertLink() {
+        const selection = window.getSelection();
+        if (selection.isCollapsed) {
             showToast('info', 'Select some text first');
             return;
         }
-        const url = window.prompt('Enter URL:', 'https://');
+        // The custom prompt modal steals focus away from the editor while
+        // it's open (and back again after), which collapses/loses the text
+        // selection - save the range now and restore it right before
+        // createLink runs, or the link would land in the wrong place (or
+        // nowhere at all).
+        const savedRange = selection.getRangeAt(0).cloneRange();
+        const url = await customPrompt('Insert link', { placeholder: 'https://', defaultValue: 'https://', okLabel: 'Insert' });
         if (!url) return;
+        textInput.focus();
+        selection.removeAllRanges();
+        selection.addRange(savedRange);
         execFormat('createLink', url);
     }
 
@@ -1512,26 +1617,59 @@ document.addEventListener('DOMContentLoaded', () => {
         return [...root.childNodes].map(serialize).join('').replace(/\n{3,}/g, '\n\n').trim();
     }
 
-    // Flattens the DOM into text runs tagged with bold/italic so the PDF can
-    // render actual styled text instead of one flat string.
+    // Flattens the DOM into a sequence of block markers (one per paragraph/
+    // heading/list-item/blockquote, carrying its type and - for list items -
+    // its ordered/index info) followed by that block's inline text runs,
+    // each run tagged with every inline style the PDF export can actually
+    // render (bold/italic/strike/code/link). The block marker always comes
+    // first so the PDF renderer knows a list item needs a "•"/"1." prefix
+    // and a heading needs a bigger font *before* it lays out that block's
+    // first word, not after.
     function getStyledRuns(root) {
         const runs = [];
-        const BREAK_TAGS = new Set(['P', 'DIV', 'LI', 'BLOCKQUOTE', 'H1', 'H2', 'H3']);
-        function walk(node, bold, italic) {
+        const BLOCK_TAGS = { P: 'p', DIV: 'p', LI: 'li', BLOCKQUOTE: 'blockquote', H1: 'h1', H2: 'h2', H3: 'h3' };
+
+        function walkInline(node, state) {
             if (node.nodeType === Node.TEXT_NODE) {
                 const text = node.nodeValue.replace(/\s+/g, ' ');
-                if (text) runs.push({ text, bold, italic });
+                if (text) runs.push({ text, ...state });
                 return;
             }
             if (node.nodeType !== Node.ELEMENT_NODE) return;
             const tag = node.tagName;
-            if (tag === 'BR') { runs.push({ text: '\n', isBreak: true }); return; }
-            const nextBold = bold || tag === 'STRONG' || tag === 'B' || tag === 'H1' || tag === 'H2' || tag === 'H3';
-            const nextItalic = italic || tag === 'EM' || tag === 'I';
-            [...node.childNodes].forEach(child => walk(child, nextBold, nextItalic));
-            if (BREAK_TAGS.has(tag)) runs.push({ text: '\n', isBreak: true });
+            if (tag === 'BR') { runs.push({ text: '\n', isLineBreak: true }); return; }
+            const next = {
+                bold: state.bold || tag === 'STRONG' || tag === 'B',
+                italic: state.italic || tag === 'EM' || tag === 'I',
+                strike: state.strike || tag === 'S',
+                code: state.code || tag === 'CODE',
+                link: state.link || (tag === 'A' ? node.getAttribute('href') : state.link)
+            };
+            [...node.childNodes].forEach(child => walkInline(child, next));
         }
-        [...root.childNodes].forEach(child => walk(child, false, false));
+
+        function walkBlock(node) {
+            if (node.nodeType === Node.TEXT_NODE) { walkInline(node, {}); return; }
+            if (node.nodeType !== Node.ELEMENT_NODE) return;
+            const tag = node.tagName;
+            if (tag === 'UL' || tag === 'OL') {
+                let i = 1;
+                [...node.children].forEach(li => {
+                    if (li.tagName !== 'LI') return;
+                    runs.push({ isBlockStart: true, blockType: 'li', ordered: tag === 'OL', index: i++ });
+                    [...li.childNodes].forEach(c => walkInline(c, {}));
+                });
+                return;
+            }
+            if (BLOCK_TAGS[tag]) {
+                runs.push({ isBlockStart: true, blockType: BLOCK_TAGS[tag] });
+                [...node.childNodes].forEach(c => walkInline(c, {}));
+                return;
+            }
+            [...node.childNodes].forEach(walkBlock);
+        }
+
+        [...root.childNodes].forEach(walkBlock);
         return runs;
     }
 
@@ -1540,38 +1678,123 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!jsPDFCtor) { showToast('error', 'PDF export unavailable - library failed to load'); return; }
         const doc = new jsPDFCtor({ unit: 'pt', format: 'a4' });
         const margin = 48;
-        const fontSize = 11;
-        const lineHeight = 15;
+        const baseFontSize = 11;
+        const baseLineHeight = 15;
         const pageHeight = doc.internal.pageSize.getHeight();
-        const maxX = doc.internal.pageSize.getWidth() - margin;
-        doc.setFontSize(fontSize);
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const HEADING_SIZES = { h1: 20, h2: 16, h3: 13 };
+        const LINK_COLOR = [28, 110, 140];
+        const TEXT_COLOR = [20, 20, 20];
+        const CODE_COLOR = [90, 90, 90];
 
         let x = margin;
         let y = margin;
-        function newLine() {
-            x = margin;
-            y += lineHeight;
+        let fontSize = baseFontSize;
+        let lineHeight = baseLineHeight;
+        let indent = margin;
+        let maxX = pageWidth - margin;
+        let firstLineOfDoc = true;
+
+        function newLine(extraGap = 0) {
+            x = indent;
+            y += lineHeight + extraGap;
             if (y > pageHeight - margin) { doc.addPage(); y = margin; }
         }
 
-        getStyledRuns(textInput).forEach(run => {
-            if (run.isBreak) { newLine(); return; }
+        function applyBlockStyle(blockType) {
+            if (blockType === 'h1' || blockType === 'h2' || blockType === 'h3') {
+                fontSize = HEADING_SIZES[blockType];
+                lineHeight = fontSize * 1.3;
+                indent = margin;
+            } else if (blockType === 'blockquote' || blockType === 'li') {
+                fontSize = baseFontSize;
+                lineHeight = baseLineHeight;
+                indent = margin + 18;
+            } else {
+                fontSize = baseFontSize;
+                lineHeight = baseLineHeight;
+                indent = margin;
+            }
+            maxX = pageWidth - margin;
+            x = indent;
+        }
+
+        function drawWord(word, run) {
+            doc.setFontSize(fontSize);
             const style = run.bold && run.italic ? 'bolditalic' : run.bold ? 'bold' : run.italic ? 'italic' : 'normal';
-            doc.setFont('helvetica', style);
-            run.text.split(/(\s+)/).filter(Boolean).forEach(word => {
-                const width = doc.getStringUnitWidth(word) * fontSize / doc.internal.scaleFactor;
-                if (x + width > maxX && word.trim()) newLine();
+            doc.setFont(run.code ? 'courier' : 'helvetica', style);
+            const width = doc.getStringUnitWidth(word) * fontSize / doc.internal.scaleFactor;
+            if (x + width > maxX && word.trim()) newLine();
+            if (run.link) {
+                doc.setTextColor(...LINK_COLOR);
+                doc.textWithLink(word, x, y, { url: run.link });
+            } else {
+                doc.setTextColor(...(run.code ? CODE_COLOR : TEXT_COLOR));
                 doc.text(word, x, y);
-                x += width;
-            });
+            }
+            if (run.strike && word.trim()) {
+                const strikeY = y - fontSize * 0.32;
+                doc.setDrawColor(...(run.code ? CODE_COLOR : TEXT_COLOR));
+                doc.setLineWidth(0.6);
+                doc.line(x, strikeY, x + width, strikeY);
+            }
+            x += width;
+        }
+
+        let awaitingBlockPrefix = false;
+
+        getStyledRuns(textInput).forEach(run => {
+            if (run.isBlockStart) {
+                if (!firstLineOfDoc) {
+                    const gap = run.blockType === 'h1' || run.blockType === 'h2' || run.blockType === 'h3' ? 6
+                        : run.blockType === 'li' ? 1 : 4;
+                    newLine(gap);
+                }
+                firstLineOfDoc = false;
+                applyBlockStyle(run.blockType);
+                awaitingBlockPrefix = run.blockType === 'li';
+                if (awaitingBlockPrefix) {
+                    const marker = run.ordered ? `${run.index}.` : '•';
+                    doc.setFont('helvetica', 'normal');
+                    doc.setFontSize(fontSize);
+                    doc.setTextColor(...TEXT_COLOR);
+                    doc.text(marker, margin + 4, y);
+                    awaitingBlockPrefix = false;
+                }
+                return;
+            }
+            if (run.isLineBreak) { newLine(); return; }
+            run.text.split(/(\s+)/).filter(Boolean).forEach(word => drawWord(word, run));
         });
 
         doc.save('character-counter-export.pdf');
     }
 
     function exportAsDoc() {
+        // Real semantic HTML (<strong>, <s>, <a href>, <ul>/<ol>, <h1-3>,
+        // <blockquote>) renders correctly in Word on its own - Word's HTML
+        // import engine understands those natively, unlike jsPDF which has
+        // no HTML renderer at all and had to be taught each one by hand.
+        // The one real gap: this HTML carries no styles of its own (the
+        // live editor's look comes entirely from styles.css, which isn't
+        // part of the export), so code blocks and blockquotes would lose
+        // their visual treatment and just look like plain paragraphs - this
+        // style block, using fixed colors rather than this app's CSS
+        // variables (which Word's renderer won't resolve), restores that.
         const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-<head><meta charset="utf-8"><title>Character Counter Pro Export</title></head>
+<head>
+<meta charset="utf-8">
+<title>Character Counter Pro Export</title>
+<style>
+    body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #15191e; }
+    code { font-family: 'Consolas', 'Courier New', monospace; font-size: 0.92em; background: #f7f9fa; border: 1px solid #e4e8ec; padding: 1px 6px; }
+    blockquote { margin: 0.5em 0; padding: 2px 0 2px 14px; border-left: 3px solid #d8dde3; color: #5f6b76; }
+    h1, h2, h3 { font-weight: 800; }
+    a { color: #0f6e5e; text-decoration: underline; }
+    s, strike { text-decoration: line-through; }
+    ul, ol { padding-left: 1.6em; }
+</style>
+</head>
 <body>${textInput.innerHTML || '<p></p>'}</body></html>`;
         downloadBlob(new Blob(['﻿', html], { type: 'application/msword' }), 'character-counter-export.doc');
     }
@@ -1617,8 +1840,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (type === 'share') {
             if (!getPlainText(textInput).trim()) { showToast('info', 'Nothing to share'); return; }
             const link = `${location.origin}${location.pathname}#share=${encodeURIComponent(utf8ToBase64(textInput.innerHTML))}`;
+            // The whole document is encoded into the URL itself, with no
+            // length check - past a certain size the link can get truncated
+            // or mangled by messaging apps, email clients, or browsers that
+            // cap URL length, silently producing a link that just doesn't
+            // work. There's no hard cross-platform limit, but ~8000
+            // characters is a reasonable point past which that risk becomes
+            // real; still copy it either way, just say so.
+            const tooLong = link.length > 8000;
             navigator.clipboard.writeText(link)
-                .then(() => showToast('success', 'Shareable link copied'))
+                .then(() => {
+                    if (tooLong) {
+                        showToast('warning', `Link copied, but it's long (${link.length.toLocaleString()} chars) and may not work in every app - for a long document like this, Drive or a file export is more reliable.`, 5500);
+                    } else {
+                        showToast('success', 'Shareable link copied');
+                    }
+                })
                 .catch(() => showToast('error', 'Could not copy link'));
         }
     }
@@ -1875,12 +2112,21 @@ document.addEventListener('DOMContentLoaded', () => {
     /* ---------- generic panel system (settings / documents / command palette) ---------- */
     let activePanel = null;
 
+    // Moves the real #analytics node (not a clone) back out of the stats
+    // modal into its normal spot in <main>, so every id-based JS hook
+    // (char-count, word-density, etc.) keeps pointing at a connected
+    // element whether or not the modal was ever opened.
+    function restoreAnalyticsFromModal() {
+        if (analyticsAside.parentElement !== mainEl) mainEl.appendChild(analyticsAside);
+    }
+
     function closeAllPanelsInstantly() {
-        [settingsPanel, documentsPanel, commandPalette, saveStatusModal].forEach(el => {
+        [settingsPanel, documentsPanel, commandPalette, saveStatusModal, statsModal].forEach(el => {
             el.classList.remove('show');
             el.classList.add('hidden');
             if (el.hasAttribute('aria-hidden')) el.setAttribute('aria-hidden', 'true');
         });
+        restoreAnalyticsFromModal();
         scrim.classList.remove('show');
         scrim.classList.add('hidden');
         activePanel = null;
@@ -1920,12 +2166,23 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
             el.classList.add('hidden');
             scrim.classList.add('hidden');
+            if (el === statsModal) restoreAnalyticsFromModal();
         }, delay);
         activePanel = null;
     }
 
     const openDrawer = (panel) => openPanel(panel, 420);
     const openModal = (panel, triggerEl) => openPanel(panel, 260, triggerEl);
+
+    seeStatsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // openModal closes other panels first (which restores #analytics to
+        // <main> if it was already in the modal from a prior open) - moving
+        // it into the modal body has to happen after that, not before.
+        openModal(statsModal, seeStatsBtn);
+        statsModalBody.appendChild(analyticsAside);
+    });
+    statsModalClose.addEventListener('click', closeActivePanel);
 
     settingsIcon.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -2127,8 +2384,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const DRIVE_FOLDER_NAME = 'Character Counter';
 
     let driveAccessToken = null;
+    let driveTokenExpiresAt = 0;
     let driveFolderId = null;
     let driveTokenClient = null;
+    let driveTokenResolvers = null;
     let storageBackend = localStorage.getItem('storageBackend') === 'drive' ? 'drive' : 'local';
 
     function isDriveConfigured() {
@@ -2151,14 +2410,80 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function driveFetch(url, options = {}) {
-        return fetch(url, {
+    // Google's access tokens expire after ~1 hour and this app never asked
+    // for a new one once that happened - a long Drive session would start
+    // failing every save with a generic error and no clue why. This wraps
+    // GIS's single fixed token-client callback in a promise (its callback is
+    // set once at creation, so whichever request is "in flight" is tracked
+    // in driveTokenResolvers) so a fresh token can be requested on demand,
+    // silently (no popup) as long as the browser still has a live Google
+    // session.
+    function getDriveTokenClient() {
+        if (!driveTokenClient) {
+            driveTokenClient = window.google.accounts.oauth2.initTokenClient({
+                client_id: GOOGLE_CLIENT_ID,
+                scope: DRIVE_SCOPE,
+                callback: (resp) => {
+                    const resolvers = driveTokenResolvers;
+                    driveTokenResolvers = null;
+                    if (resp.error) { resolvers?.reject(new Error(resp.error)); return; }
+                    driveAccessToken = resp.access_token;
+                    driveTokenExpiresAt = Date.now() + Number(resp.expires_in || 3599) * 1000;
+                    resolvers?.resolve(resp);
+                }
+            });
+        }
+        return driveTokenClient;
+    }
+
+    function requestDriveToken(opts = {}) {
+        return new Promise((resolve, reject) => {
+            driveTokenResolvers = { resolve, reject };
+            getDriveTokenClient().requestAccessToken(opts);
+        });
+    }
+
+    const DRIVE_TOKEN_REFRESH_BUFFER_MS = 2 * 60 * 1000;
+
+    function driveSessionExpired() {
+        driveAccessToken = null;
+        storageBackend = 'local';
+        localStorage.setItem('storageBackend', 'local');
+        updateDriveUI();
+        showToast('error', 'Your Google Drive session expired - reconnect to keep saving there.');
+    }
+
+    async function ensureFreshDriveToken() {
+        if (!driveAccessToken) return;
+        if (Date.now() < driveTokenExpiresAt - DRIVE_TOKEN_REFRESH_BUFFER_MS) return;
+        try {
+            await requestDriveToken({ prompt: '' });
+        } catch {
+            driveSessionExpired();
+            throw new Error('Drive session expired');
+        }
+    }
+
+    async function driveFetch(url, options = {}) {
+        await ensureFreshDriveToken();
+        const withAuth = () => fetch(url, {
             ...options,
             headers: { ...(options.headers || {}), Authorization: `Bearer ${driveAccessToken}` }
-        }).then(res => {
-            if (!res.ok) throw new Error(`Drive API ${res.status}`);
-            return res;
         });
+        let res = await withAuth();
+        if (res.status === 401) {
+            // Proactive refresh above should normally prevent this, but a
+            // token can still get invalidated mid-session (revoked access,
+            // password change, etc.) - one more silent attempt before giving up.
+            try {
+                await requestDriveToken({ prompt: '' });
+                res = await withAuth();
+            } catch {
+                driveSessionExpired();
+            }
+        }
+        if (!res.ok) throw new Error(`Drive API ${res.status}`);
+        return res;
     }
 
     function getDriveFolderPath() {
@@ -2339,6 +2664,22 @@ document.addEventListener('DOMContentLoaded', () => {
         return plainTextToEditableHtml(await res.text());
     }
 
+    // Returns true if the file has been modified on Drive since
+    // activeDocRemoteModifiedAt was last set (i.e. since this document was
+    // opened or last saved from here) - the same optimistic-concurrency
+    // check most cloud-synced editors use to catch "someone else changed
+    // this in another tab/device" before silently clobbering it.
+    async function driveFileChangedSince(fileId, knownModifiedAt) {
+        if (knownModifiedAt === null) return false;
+        try {
+            const res = await driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=modifiedTime`);
+            const data = await res.json();
+            return new Date(data.modifiedTime).getTime() > knownModifiedAt + 1000;
+        } catch {
+            return false; // can't confirm either way - don't block the save over a network hiccup
+        }
+    }
+
     async function driveSaveDocument(doc) {
         const parentId = doc.folder ? await findOrCreateFolder(doc.folder, driveFolderId) : driveFolderId;
         const properties = (doc.tags && doc.tags.length) ? { tags: doc.tags.join(',') } : {};
@@ -2414,6 +2755,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function disconnectDrive() {
         driveAccessToken = null;
+        driveTokenExpiresAt = 0;
         driveFolderId = null;
         storageBackend = 'local';
         localStorage.setItem('storageBackend', 'local');
@@ -2433,30 +2775,25 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('error', 'Could not load Google sign-in - check your connection');
             return;
         }
-        if (!driveTokenClient) {
-            driveTokenClient = window.google.accounts.oauth2.initTokenClient({
-                client_id: GOOGLE_CLIENT_ID,
-                scope: DRIVE_SCOPE,
-                callback: async (resp) => {
-                    if (resp.error) { showToast('error', 'Google sign-in was cancelled or failed'); return; }
-                    driveAccessToken = resp.access_token;
-                    try {
-                        await withButtonLoader(connectDriveBtn, (async () => {
-                            driveFolderId = await ensureDriveFolder(getDriveFolderPath());
-                            storageBackend = 'drive';
-                            localStorage.setItem('storageBackend', 'drive');
-                            updateDriveUI();
-                            await renderDocuments();
-                        })());
-                        showToast('success', 'Connected to Google Drive');
-                        try { await loadSettingsFromDrive(); } catch { /* local settings stay in effect */ }
-                    } catch {
-                        showToast('error', 'Connected, but could not set up the Drive folder');
-                    }
-                }
-            });
+        try {
+            await requestDriveToken();
+        } catch {
+            showToast('error', 'Google sign-in was cancelled or failed');
+            return;
         }
-        driveTokenClient.requestAccessToken();
+        try {
+            await withButtonLoader(connectDriveBtn, (async () => {
+                driveFolderId = await ensureDriveFolder(getDriveFolderPath());
+                storageBackend = 'drive';
+                localStorage.setItem('storageBackend', 'drive');
+                updateDriveUI();
+                await renderDocuments();
+            })());
+            showToast('success', 'Connected to Google Drive');
+            try { await loadSettingsFromDrive(); } catch { /* local settings stay in effect */ }
+        } catch {
+            showToast('error', 'Connected, but could not set up the Drive folder');
+        }
     }
 
     connectDriveBtn.addEventListener('click', connectGoogleDrive);
@@ -2621,7 +2958,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const folder = folderInput.value.trim().slice(0, 60);
                 const tags = tagsInput.value.split(',').map(t => t.trim()).filter(Boolean).slice(0, 15);
                 await DocStore.update(doc.id, { name, folder, tags });
-                if (doc.id === activeDocId) documentTitleInput.value = name;
+                if (doc.id === activeDocId) {
+                    documentTitleInput.value = name;
+                    // This just wrote to the file too (rename/retag), which
+                    // bumps its modifiedTime - without this, the next
+                    // content save would see that bump and wrongly think the
+                    // document had been changed elsewhere.
+                    if (isDriveActive()) activeDocRemoteModifiedAt = Date.now();
+                }
                 editingDocId = null;
                 renderDocuments();
                 showToast('success', 'Document updated');
@@ -2783,6 +3127,12 @@ document.addEventListener('DOMContentLoaded', () => {
         renderDocumentsList();
     });
 
+    // Tracks, for whichever document is currently open, Drive's modifiedTime
+    // as of when it was last loaded or saved from here - null for local
+    // (non-Drive) documents, where this kind of multi-device conflict can't
+    // happen since IndexedDB is already local to one browser.
+    let activeDocRemoteModifiedAt = null;
+
     async function loadDocument(id, triggerEl) {
         const meta = documentsCache.find(d => d.id === id);
         if (!meta) return;
@@ -2798,6 +3148,7 @@ document.addEventListener('DOMContentLoaded', () => {
         textInput.innerHTML = content;
         setActiveDocId(id);
         documentTitleInput.value = meta.name;
+        activeDocRemoteModifiedAt = meta.isDrive ? meta.updatedAt : null;
         updateCounts();
         snapshotHistory(textInput.innerHTML);
         closeActivePanel();
@@ -2805,7 +3156,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function deleteDocument(id, name) {
-        if (!window.confirm(`Delete "${name}"? This can't be undone.`)) return;
+        const ok = await customConfirm(`Delete "${name}"? This can't be undone.`, { title: 'Delete document?', okLabel: 'Delete', danger: true });
+        if (!ok) return;
         await DocStore.delete(id);
         if (activeDocId === id) setActiveDocId(null);
         if (editingDocId === id) editingDocId = null;
@@ -2831,7 +3183,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     documentsClose.addEventListener('click', closeActivePanel);
 
-    newDocumentBtn.addEventListener('click', () => {
+    newDocumentBtn.addEventListener('click', async () => {
+        // Unlike Clear (which at least tells you "use Undo to restore"
+        // after the fact), this used to wipe the editor - and, since
+        // autosave writes the empty state right back over the saved draft
+        // immediately after - with no warning at all and no real safety net
+        // beyond hoping you hit Undo within the next few seconds.
+        if (getPlainText(textInput).trim()) {
+            const ok = await customConfirm('Your current text will be cleared.', { title: 'Start a new blank document?', okLabel: 'Clear text' });
+            if (!ok) return;
+        }
         textInput.innerHTML = '';
         setActiveDocId(null);
         documentTitleInput.value = '';
@@ -2856,11 +3217,20 @@ document.addEventListener('DOMContentLoaded', () => {
         const tags = saveAsTagsInput.value.split(',').map(t => t.trim()).filter(Boolean).slice(0, 15);
 
         if (activeDocId) {
+            if (isDriveActive() && await driveFileChangedSince(activeDocId, activeDocRemoteModifiedAt)) {
+                const proceed = await customConfirm(
+                    'This document was changed in another tab or device since you opened it here. Saving now will overwrite that other version.',
+                    { title: 'Changed elsewhere', okLabel: 'Save anyway', danger: true }
+                );
+                if (!proceed) return;
+            }
             await withButtonLoader(saveAsBtn, DocStore.update(activeDocId, { name, content: textInput.innerHTML, folder, tags }));
+            activeDocRemoteModifiedAt = isDriveActive() ? Date.now() : null;
             showToast('success', `Updated "${name}"`);
         } else {
             const saved = await withButtonLoader(saveAsBtn, DocStore.save({ name, content: textInput.innerHTML, folder, tags, updatedAt: Date.now() }));
             setActiveDocId(saved.id);
+            activeDocRemoteModifiedAt = isDriveActive() ? Date.now() : null;
             showToast('success', `Saved "${name}"`);
         }
 
