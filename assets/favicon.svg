@@ -1,0 +1,21 @@
+<svg viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cc-favicon-bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0f6e5e"/>
+      <stop offset="1" stop-color="#1c8c99"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Solid, fully-opaque treatment for favicon/tab contexts, where this
+       renders tiny against arbitrary (often white or dark) browser chrome -
+       the in-app badge's translucent glass version only reads well because
+       it always sits on this app's own background, which a favicon can't
+       count on. Bars are bigger and bolder than the in-app mark too, with
+       almost no canvas padding, so it holds its own next to other sites'
+       high-contrast tab icons. -->
+  <rect width="512" height="512" rx="96" fill="url(#cc-favicon-bg)"/>
+
+  <rect x="48" y="272" width="112" height="192" rx="30" fill="#ffffff"/>
+  <rect x="200" y="160" width="112" height="304" rx="30" fill="#ffffff"/>
+  <rect x="352" y="48" width="112" height="256" rx="30" fill="#ffb13d"/>
+</svg>

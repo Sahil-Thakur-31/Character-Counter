@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="A fast, beautiful character, word and readability counter with live analytics.">
     <title>Character Counter Pro</title>
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
     <script>
         // Applies the saved theme before the page paints, so a dark-mode
         // visitor never sees a flash of the light theme on load/refresh -
@@ -38,7 +39,9 @@
     <div id="app">
         <header>
             <div class="brand">
-                <span class="brand-badge">Aa</span>
+                <span class="brand-badge" aria-hidden="true">
+                    <img src="assets/logo.svg" alt="" class="brand-badge-img">
+                </span>
                 <div class="brand-text">
                     <h1>Character Counter</h1>
                     <p class="brand-sub">Live text analytics, zero friction</p>

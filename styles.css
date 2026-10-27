@@ -315,13 +315,17 @@ header {
     width: 42px;
     height: 42px;
     border-radius: var(--radius-md);
-    background: var(--gradient-brand);
-    color: #fff;
-    font-weight: 800;
-    font-size: 1.1em;
-    box-shadow: var(--shadow-md);
+    /* An SVG's own fill opacity can only fake translucency against its own
+       canvas - it can't see what's actually behind it. This is what makes
+       the badge genuinely frost whatever's in the header behind it. */
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
     transition: transform var(--dur-med) var(--ease-spring);
 }
+
+/* The logo asset already draws its own glass background, rim light and
+   drop shadow, so the badge itself is just a sizing wrapper now. */
+.brand-badge-img { width: 100%; height: 100%; display: block; }
 
 .brand:hover .brand-badge {
     transform: rotate(-8deg) scale(1.06);
@@ -1360,9 +1364,16 @@ main {
 }
 
 /* ============ Focus mode ============ */
+/* .stats-secondary/#word-density are scoped to main specifically (not just
+   body.focus-mode) - unscoped, this collapsed them even once they're
+   relocated into #stats-modal-body (see the "See stats" modal, which
+   moves the real #analytics node, secondary stats and word-density
+   included), hiding stats that modal exists specifically to show. This
+   collapse is a desktop-sidebar-only space-saving measure and should
+   never reach the modal. */
 body.focus-mode .toolbar,
-body.focus-mode .stats-secondary,
-body.focus-mode #word-density {
+body.focus-mode main .stats-secondary,
+body.focus-mode main #word-density {
     opacity: 0;
     max-height: 0;
     padding-top: 0;
@@ -1749,6 +1760,12 @@ main {
     padding: 0;
     gap: 16px;
 }
+
+/* In focus mode .header-icons physically lives inside #analytics (see
+   script.js), so it rides along whenever #analytics gets moved into this
+   modal - the modal is "Stats & Report" only, not a second copy of the
+   icon row. */
+#stats-modal-body .header-icons { display: none; }
 
 #stats-modal-body #stats-container {
     display: grid;
@@ -2718,11 +2735,36 @@ input[type="range"]::-moz-range-thumb {
     #analytics { width: 100%; height: auto; flex: 1 1 50%; min-height: 0; }
 
     /* Stats move into the same on-demand modal as mobile at every stacked
-       (tablet-and-down) width - full page for content, surfaced via the
-       "Stats" eye icon in the header - except in focus mode, which keeps
-       its own condensed strip alongside the editor instead. */
+       (tablet-and-down) width, including focus mode - the desktop-only
+       condensed sidebar strip was never actually tuned for tablet/phone
+       widths (see the mobile-audit work elsewhere in this file), so focus
+       mode gets the same "just the eye icon" treatment as normal mode
+       here instead of trying to fit a stats panel beside the content.
+       Outside focus mode #analytics can just be display:none outright,
+       but in focus mode setFocusMode() (script.js) physically relocates
+       .header-icons to be a CHILD of #analytics - display:none on an
+       ancestor would take the icon row down with it, so focus mode instead
+       keeps #analytics itself visible as a bare wrapper and hides only its
+       stats content. */
     body:not(.focus-mode) #analytics { display: none; }
-    body:not(.focus-mode) #see-stats-btn { display: grid; }
+    #see-stats-btn { display: grid; }
+    /* Scoped to #analytics while it's still inside <main> (its normal
+       resting place) specifically - body.focus-mode alone isn't enough,
+       since the body keeps that class even while the stats modal is open,
+       and #analytics gets relocated there too (see script.js). Without
+       this scoping these rules would also hide the stats once they're
+       inside the modal, which is exactly where they need to render. */
+    body.focus-mode main #analytics {
+        width: auto;
+        flex: 0 0 auto;
+        padding: 0;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+    }
+    body.focus-mode main #analytics #stats-container,
+    body.focus-mode main #analytics .stats-secondary,
+    body.focus-mode main #analytics #word-density { display: none; }
 
     /* Goal sits in the title row here too (like mobile), just with more
        room to spend: 60/40 instead of mobile's 70/30. The icon buttons
@@ -2741,11 +2783,10 @@ input[type="range"]::-moz-range-thumb {
 
     /* Focus mode's ultra-thin sidebar only makes sense next to a tall,
        narrow editor column - once main stacks instead of sitting
-       side-by-side, force it back to a normal full-width strip (2-column
-       KPIs, the relocated icon cluster laid out horizontally) instead of
-       staying squeezed to its desktop 88px width. */
-    body.focus-mode #analytics { width: 100%; max-height: 42vh; }
-    body.focus-mode #stats-container { grid-template-columns: 1fr 1fr; }
+       side-by-side, the relocated icon cluster (the eye icon included)
+       goes back to a normal horizontal row instead of staying squeezed
+       into its desktop vertical strip. #analytics itself stays hidden
+       here (see above) - stats only open on demand through that icon. */
     body.focus-mode .header-icons { flex-direction: row; flex-wrap: wrap; }
     body.focus-mode .header-icons .icon-btn,
     body.focus-mode .header-icons .last-saved { width: auto; flex: 1 1 auto; }
